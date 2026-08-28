@@ -1,0 +1,18 @@
+{
+  "name": "biblioteca-api",
+  "version": "1.0.0",
+  "description": "Biblioteca API - Taller de Programación 2",
+  "main": "index.js",
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "eventloop": "node asincronismo/eventloop.js",
+    "callback": "node asincronismo/callback.js",
+    "promesa": "node asincronismo/promesa.js",
+    "asyncawait": "node asincronismo/asyncawait.js",
+    "openlibrary": "node asincronismo/openLibrary.js",
+    "comparar": "node asincronismo/secuencialVsParalelo.js"
+  },
+  "license": "ISC"
+}

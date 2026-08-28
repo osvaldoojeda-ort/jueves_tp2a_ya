@@ -1,0 +1,8 @@
+{
+  "name": "modulos-demo",
+  "version": "1.0.0",
+  "description": "Ejercicio 2 clase 3 - CommonJS vs ES Modules",
+  "main": "main.js",
+  "type": "module",
+  "license": "ISC"
+}
