@@ -13,7 +13,12 @@
 const fs = require("fs/promises");
 const path = require("path");
 
+console.log(path);
+
+// const RUTA_LIBROS = path.join(__dirname, "data", "libros.json");
 const RUTA_LIBROS = path.join(__dirname, "data", "libros.json");
+
+console.log(__dirname);
 
 async function listarLibros() {
   const contenido = await fs.readFile(RUTA_LIBROS, "utf-8");

@@ -7,6 +7,9 @@
     "node": ">=18"
   },
   "scripts": {
+    "start": "node .",
+    "dev": "node --watch .",
+    "test": "echo \"Error: no test specified\" && exit 1",
     "eventloop": "node asincronismo/eventloop.js",
     "callback": "node asincronismo/callback.js",
     "promesa": "node asincronismo/promesa.js",

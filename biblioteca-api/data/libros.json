@@ -1,7 +1,100 @@
 [
-  { "id": 1, "titulo": "Cien años de soledad", "autor": "Gabriel García Márquez", "anio": 1967, "stock": 3 },
-  { "id": 2, "titulo": "1984", "autor": "George Orwell", "anio": 1949, "stock": 0 },
-  { "id": 3, "titulo": "El nombre del viento", "autor": "Patrick Rothfuss", "anio": 2007, "stock": 5 },
-  { "id": 4, "titulo": "Rayuela", "autor": "Julio Cortázar", "anio": 1963, "stock": 2 },
-  { "id": 5, "titulo": "Fahrenheit 451", "autor": "Ray Bradbury", "anio": 1953, "stock": 0 }
+  {
+    "id": 1,
+    "titulo": "Cien años de soledad",
+    "autor": "Gabriel García Márquez",
+    "anio": 1967,
+    "stock": 3
+  },
+  {
+    "id": 2,
+    "titulo": "1984",
+    "autor": "George Orwell",
+    "anio": 1949,
+    "stock": 0
+  },
+  {
+    "id": 3,
+    "titulo": "El nombre del viento",
+    "autor": "Patrick Rothfuss",
+    "anio": 2007,
+    "stock": 5
+  },
+  {
+    "id": 4,
+    "titulo": "Rayuela",
+    "autor": "Julio Cortázar",
+    "anio": 1963,
+    "stock": 2
+  },
+  {
+    "id": 5,
+    "titulo": "Fahrenheit 451",
+    "autor": "Ray Bradbury",
+    "anio": 1953,
+    "stock": 0
+  },
+  {
+    "id": 6,
+    "titulo": "Ficciones",
+    "autor": "Jorge Luis Borges",
+    "anio": 1944,
+    "stock": 4
+  },
+  {
+    "id": 7,
+    "titulo": "Ficciones",
+    "autor": "Jorge Luis Borges",
+    "anio": 1944,
+    "stock": 4
+  },
+  {
+    "id": 8,
+    "titulo": "Ficciones",
+    "autor": "Jorge Luis Borges",
+    "anio": 1944,
+    "stock": 4
+  },
+  {
+    "id": 9,
+    "titulo": "Ficciones",
+    "autor": "Jorge Luis Borges",
+    "anio": 1944,
+    "stock": 4
+  },
+  {
+    "id": 10,
+    "titulo": "Ficciones",
+    "autor": "Jorge Luis Borges",
+    "anio": 1944,
+    "stock": 4
+  },
+  {
+    "id": 11,
+    "titulo": "Ficciones",
+    "autor": "Jorge Luis Borges",
+    "anio": 1944,
+    "stock": 4
+  },
+  {
+    "id": 12,
+    "titulo": "Ficciones",
+    "autor": "Jorge Luis Borges",
+    "anio": 1944,
+    "stock": 4
+  },
+  {
+    "id": 13,
+    "titulo": "Ficciones",
+    "autor": "Jorge Luis Borges",
+    "anio": 1944,
+    "stock": 4
+  },
+  {
+    "id": 14,
+    "titulo": "Ficciones",
+    "autor": "Jorge Luis Borges",
+    "anio": 1944,
+    "stock": 4
+  }
 ]

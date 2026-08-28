@@ -41,6 +41,7 @@ async function main() {
     "\n(Si corren este archivo de nuevo, van a ver OTRO 'Ficciones' agregado: " +
       "es la prueba de que ahora persiste en data/libros.json, no solo en memoria.)"
   );
+  
 }
 
 main();
