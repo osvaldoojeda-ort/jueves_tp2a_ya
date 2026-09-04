@@ -1,0 +1,55 @@
+### 1. Listar todos los libros
+GET http://localhost:3000/libros
+
+### 2. Filtrar por autor
+GET http://localhost:3000/libros?autor=Orwell
+
+### 3a. Buscar por id que existe (200)
+GET http://localhost:3000/libros/1
+
+### 3b. Buscar por id que no existe (404)
+GET http://localhost:3000/libros/999
+
+### 4a. Crear un libro válido (201)
+POST http://localhost:3000/libros
+Content-Type: application/json
+
+{
+  "isbn": "9788499890944",
+  "titulo": "Ficciones",
+  "autor": "Jorge Luis Borges",
+  "stock": 4
+}
+
+### 4b. Crear un libro sin título (400)
+POST http://localhost:3000/libros
+Content-Type: application/json
+
+{
+  "autor": "Autor sin título"
+}
+
+### 5. Actualizar un libro (PUT)
+PUT http://localhost:3000/libros/1
+Content-Type: application/json
+
+{
+  "isbn": "9780307474728",
+  "titulo": "Cien años de soledad (edición actualizada)",
+  "autor": "Gabriel García Márquez",
+  "stock": 10
+}
+
+### 6. Borrar un libro
+DELETE http://localhost:3000/libros/2
+
+### 7. Listado final, para ver cómo quedó
+GET http://localhost:3000/libros
+
+### Desafío opcional: PATCH parcial (solo actualiza el stock)
+PATCH http://localhost:3000/libros/3
+Content-Type: application/json
+
+{
+  "stock": 8
+}
