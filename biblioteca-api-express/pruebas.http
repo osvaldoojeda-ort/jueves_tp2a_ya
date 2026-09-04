@@ -5,7 +5,7 @@ GET http://localhost:3000/libros
 GET http://localhost:3000/libros?autor=Orwell
 
 ### 3a. Buscar por id que existe (200)
-GET http://localhost:3000/libros/1
+GET http://localhost:3000/libros/6
 
 ### 3b. Buscar por id que no existe (404)
 GET http://localhost:3000/libros/999
