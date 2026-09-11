@@ -1,0 +1,16 @@
+### Ruta raíz
+GET http://localhost:3000/
+
+### Listado de libros
+GET http://localhost:3000/libros
+
+### Ruta inexistente (debería devolver 404)
+GET http://localhost:3000/no-existe
+
+### Desafío opcional: eco de un POST
+POST http://localhost:3000/eco
+Content-Type: application/json
+
+{
+  "mensaje": "hola servidor"
+}
