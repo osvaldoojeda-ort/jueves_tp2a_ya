@@ -33,7 +33,12 @@ async function buscarPorId(id) {
 async function buscarPorAutor(autor) {
   const libros = await listarLibros();
   const autorBuscado = autor.toLowerCase();
-  return libros.filter((libro) => libro.autor.toLowerCase().includes(autorBuscado));
+  const encontrado = libros.filter((libro) => libro.autor.toLowerCase().includes(autorBuscado));
+  if (encontrado.length > 0) {
+    return encontrado;
+  } else {
+    throw new Error(`No se encontró ningún libro del autor "${autor}"`);
+  }
 }
 
 async function contarConStock() {

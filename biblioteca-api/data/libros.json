@@ -68,33 +68,5 @@
     "autor": "Jorge Luis Borges",
     "anio": 1944,
     "stock": 4
-  },
-  {
-    "id": 11,
-    "titulo": "Ficciones",
-    "autor": "Jorge Luis Borges",
-    "anio": 1944,
-    "stock": 4
-  },
-  {
-    "id": 12,
-    "titulo": "Ficciones",
-    "autor": "Jorge Luis Borges",
-    "anio": 1944,
-    "stock": 4
-  },
-  {
-    "id": 13,
-    "titulo": "Ficciones",
-    "autor": "Jorge Luis Borges",
-    "anio": 1944,
-    "stock": 4
-  },
-  {
-    "id": 14,
-    "titulo": "Ficciones",
-    "autor": "Jorge Luis Borges",
-    "anio": 1944,
-    "stock": 4
   }
 ]

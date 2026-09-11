@@ -21,7 +21,12 @@ async function main() {
   console.log(await buscarPorId(2));
 
   console.log("\n--- Buscar por autor 'cortázar' ---");
-  console.log(await buscarPorAutor("cortázar"));
+    try{
+      const encontrado = await buscarPorAutor("qwrqwerqewr");
+      console.log(encontrado);
+    } catch (error) {
+      console.error(error.message);
+    }
 
   console.log("\n--- Contar libros con stock > 0 ---");
   console.log(await contarConStock());
