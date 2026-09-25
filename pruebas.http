@@ -42,7 +42,7 @@ Content-Type: application/json
 {
   "title": "El Aleph",
   "author": "Jorge Luis Borges",
-  "isbn": "123"
+  "isbn": "1230393312838"
 }
 
 ### 6. POST /books — ISBN duplicado: 409 (lógica de negocio, no validación)
