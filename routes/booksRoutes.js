@@ -5,10 +5,15 @@ import { createBookSchema, updateBookSchema, paginationSchema } from "../schemas
 
 const router = express.Router();
 
-router.get("/", validateQuery(paginationSchema), booksController.list);
-router.get("/:id", booksController.get);
-router.post("/", validate(createBookSchema), booksController.create);
-router.put("/:id", validate(updateBookSchema), booksController.update);
+// router.get("/", validateQuery(paginationSchema), booksController.list);
+// router.get("/:id", booksController.get);
+// router.post("/", validate(createBookSchema), booksController.create);
+// router.put("/:id", validate(updateBookSchema), booksController.update);
+// router.delete("/:id", booksController.remove);
+router.get("/",       booksController.list);
+router.get("/:id",    booksController.get);
+router.post("/",      validate(tuSchemaDeCreacion), booksController.create);
+router.put("/:id",    validate(tuSchemaDeUpdate),   booksController.update);
 router.delete("/:id", booksController.remove);
 
 export default router;

@@ -1,0 +1,71 @@
+@host = http://localhost:3000
+
+### 1. Listar libros → 200, los 2 de la semilla
+GET {{host}}/books
+
+### 2. Detalle → 200
+GET {{host}}/books/1
+
+### 3. Libro inexistente → 404 BOOK_NOT_FOUND
+GET {{host}}/books/999
+
+### 4. Body incompleto → 400 con details (Zod)
+POST {{host}}/books
+Content-Type: application/json
+
+{
+  "titulo": ""
+}
+
+### 5. Válido sin ISBN → 201, stock: 0
+POST {{host}}/books
+Content-Type: application/json
+
+{
+  "titulo": "Rayuela",
+  "autor": "Julio Cortázar"
+}
+
+### 6. Con ISBN → 201
+POST {{host}}/books
+Content-Type: application/json
+
+{
+  "titulo": "Ficciones",
+  "autor": "Jorge Luis Borges",
+  "isbn": "9789875666474",
+  "stock": 2
+}
+
+### 7. Mismo ISBN → 409 ISBN_DUPLICATE
+POST {{host}}/books
+Content-Type: application/json
+
+{
+  "titulo": "Ficciones (otra edición)",
+  "autor": "Jorge Luis Borges",
+  "isbn": "9789875666474",
+  "stock": 1
+}
+
+### 8. Actualizar stock → 200, titulo intacto
+PUT {{host}}/books/1
+Content-Type: application/json
+
+{
+  "stock": 10
+}
+
+### 9. Borrar → 204
+DELETE {{host}}/books/1
+
+### 10. Borrar de nuevo → 404
+DELETE {{host}}/books/1
+
+### DESAFÍO: stock negativo → 400 INVALID_STOCK (o 400 de Zod si el schema ya tiene min(0))
+PUT {{host}}/books/2
+Content-Type: application/json
+
+{
+  "stock": -5
+}
