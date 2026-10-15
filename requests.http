@@ -76,3 +76,53 @@ GET http://localhost:8000/books?sort=-titulo
 
 ### 14. Filtrar por ISBN (?isbn=9789500700122)
 GET http://localhost:8000/books?isbn=9789500700122
+
+### ===================== USERS =====================
+
+### 15. Listar usuarios
+GET http://localhost:8000/users
+
+### 16. Obtener usuario por ID
+GET http://localhost:8000/users/1
+
+### 17. Usuario inexistente (404 USER_NOT_FOUND)
+GET http://localhost:8000/users/999
+
+### 18. Crear usuario válido (rol por defecto: lector)
+POST http://localhost:8000/users
+Content-Type: application/json
+
+{
+  "nombre": "Ana",
+  "email": "ana@mail.com"
+}
+
+### 19. Email duplicado (409 EMAIL_DUPLICATED)
+POST http://localhost:8000/users
+Content-Type: application/json
+
+{
+  "nombre": "Ana Bis",
+  "email": "ana@mail.com"
+}
+
+### 20. Datos inválidos (400 Zod)
+POST http://localhost:8000/users
+Content-Type: application/json
+
+{
+  "nombre": "A",
+  "email": "no-es-email",
+  "rol": "root"
+}
+
+### 21. Actualizar usuario
+PUT http://localhost:8000/users/1
+Content-Type: application/json
+
+{
+  "nombre": "Administrador"
+}
+
+### 22. Eliminar usuario (204)
+DELETE http://localhost:8000/users/2

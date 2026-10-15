@@ -1,15 +1,11 @@
 import { Sequelize } from "sequelize";
 
-const sequelize= new Sequelize({
-    dialect: "sqlite",
-    storage:"./data/library.sqlite",
-})
+// Configuración básica de Sequelize usando SQLite en memoria
+// (Podría ser 'sqlite:./database.sqlite' para persistir en disco local)
+const sequelize = new Sequelize({
+  dialect: "sqlite",
+  storage: "./database.sqlite",//:memory: para no guardar nada.
+  logging: false, // Cambiar a console.log para ver las queries SQL
+});
 
-try {
-  await sequelize.authenticate();
-  console.log('Connection has been established successfully.');
-} catch (error) {
-  console.error('Unable to connect to the database:', error);
-}
-
-export default sequelize
+export default sequelize;

@@ -8,6 +8,12 @@ const fields = {
   stock: z
     .number({ error: "El stock debe ser un número" })
     .int("El stock debe ser un número entero"),
+  // Usuario propietario del libro; null lo deja sin asignar
+  userId: z
+    .number({ error: "El userId debe ser un número" })
+    .int("El userId debe ser un número entero")
+    .positive("El userId debe ser positivo")
+    .nullable(),
 };
 
 // Esquema para POST /books
@@ -17,6 +23,7 @@ const createBookSchema = z.object({
   autor: fields.autor,
   isbn: fields.isbn.optional(),
   stock: fields.stock.nonnegative("El stock no puede ser negativo").default(0),
+  userId: fields.userId.optional(),
 });
 
 // Esquema para PUT /books/:id (actualización parcial)
@@ -27,6 +34,7 @@ const updateBookSchema = z.object({
   autor: fields.autor.optional(),
   isbn: fields.isbn.optional(),
   stock: fields.stock.optional(),
+  userId: fields.userId.optional(),
 });
 
 // Esquema de paginación para query params

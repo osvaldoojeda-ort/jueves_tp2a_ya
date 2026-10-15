@@ -1,47 +1,33 @@
 import express from "express";
-
 import logger from "./middlewares/logger.js";
 import notFound from "./middlewares/notFound.js";
 import errorHandler from "./middlewares/errorHandler.js";
-
-// Importación del módulo de configuración centralizada de variables de entorno
 import { PORT } from "./config/config.js";
+import buildContainer from "./container/container.js";
 
-// Importación de módulos de arquitectura para la composición
-import booksMemoryDao from "./dao/booksMemoryDao.js";
-import makeBookUseCases from "./usecases/books/makeBookUseCases.js";
-import BooksController from "./controllers/booksController.js";
-import createRouter from "./routes/index.js";
+async function startServer() {
+  const app = express();
 
-import sequelize from "./connection/sequelize.js";
-import User from "./dao/model/User.js";
+  // Middlewares globales
+  app.use(logger);
+  app.use(express.json());
 
-const app = express();
+  // Obtenemos el router centralizado desde nuestro Composition Root (Container)
+  try {
+    const router = await buildContainer();
+    app.use(router);
+  } catch (err) {
+    console.error("Error al inicializar el contenedor de dependencias:", err);
+    process.exit(1);
+  }
 
-// -----------------------------------------------------------------------------
-// COMPOSITION ROOT (Punto de Ensamblado e Inyección de Dependencias - Clase 8)
-// 1. Instanciamos o seleccionamos el DAO (puerto de persistencia)
-// 2. Pasamos el DAO a la Factory de Casos de Uso (makeBookUseCases)
-// 3. Inyectamos los Casos de Uso al Controlador (BooksController)
-// 4. Inyectamos el Controlador al Router (createRouter)
-// -----------------------------------------------------------------------------
-const bookUseCases = makeBookUseCases(booksMemoryDao);
-const booksController = new BooksController(bookUseCases);
-const router = createRouter(booksController);
+  // Manejadores de cierre
+  app.use(notFound);
+  app.use(errorHandler);
 
-// Middlewares globales
-app.use(logger);
-app.use(express.json());
+  app.listen(PORT, () => {
+    console.log(`Servidor Express (Clase 9) corriendo en http://localhost:${PORT}`);
+  });
+}
 
-User.sync()
-
-// Router centralizado de la aplicación
-app.use(router);
-
-// Manejadores de cierre (404 Not Found y Error Handler global)
-app.use(notFound);
-app.use(errorHandler);
-
-app.listen(PORT, () => {
-  console.log(`Servidor Express (Clase 8) corriendo en http://localhost:${PORT}`);
-});
+startServer();

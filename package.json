@@ -1,28 +1,20 @@
 {
-  "name": "biblioteca-api-express",
+  "name": "biblioteca-api-sequelize",
   "version": "1.0.0",
-  "description": "API REST de Biblioteca — Arquitectura en Capas y DAO basada en Clases (Clase 8)",
+  "description": "API REST de Biblioteca — Persistencia Intercambiable (Sequelize / SQLite) e IoC (Clase 9)",
   "type": "module",
   "main": "index.js",
   "scripts": {
     "start": "node --env-file=.env index.js",
     "dev": "node --env-file=.env --watch index.js"
   },
-  "keywords": [
-    "express",
-    "rest-api",
-    "node",
-    "zod",
-    "dao",
-    "layers",
-    "classes"
-  ],
+  "keywords": ["express", "rest-api", "node", "zod", "dao", "sequelize", "sqlite", "ioc"],
   "author": "",
   "license": "ISC",
   "dependencies": {
     "express": "^5.2.1",
-    "sequelize": "^6.37.8",
-    "sqlite3": "^6.0.1",
+    "sequelize": "^6.37.5",
+    "sqlite3": "^5.1.7",
     "zod": "^4.5.4"
   }
 }
