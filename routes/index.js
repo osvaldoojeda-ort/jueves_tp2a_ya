@@ -1,9 +1,11 @@
 import { Router } from "express";
-import booksRoutes from "./booksRoutes.js";
+import createBooksRouter from "./booksRoutes.js";
 
-const router = Router();
+function createRouter(booksController) {
+  const router = Router();
+  router.use("/books", createBooksRouter(booksController));
+  return router;
+}
 
-// Montamos los routers de recursos con su prefijo base
-router.use("/books", booksRoutes);
+export default createRouter;
 
-export default router;

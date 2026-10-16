@@ -1,58 +1,54 @@
-import AppError from "../errors/AppError.js";
-import dao from "../dao/booksMemoryDao.js";
-import getBooks from "../usecases/books/getBooks.js";
-import getBookById from "../usecases/books/getBookById.js";
-import createBook from "../usecases/books/createBook.js";
-import updateBook from "../usecases/books/updateBook.js";
-import deleteBook from "../usecases/books/deleteBook.js";
-
-/**
- * Controlador de Libros basado en Clases.
- * Recibe la instancia del DAO a través de Inyección de Dependencias en el constructor.
- * Utiliza propiedades de flecha para preservar la referencia a `this.#dao` al pasarse como middleware en Express.
- */
 class BooksController {
-  // El prefijo '#' indica un campo privado de clase (ES2020).
-  // Solo se puede acceder a `#dao` desde dentro de esta clase (encapsulamiento).
-  #dao;
+  #useCases;
 
-  constructor(daoDependency = dao) {
-    this.#dao = daoDependency;
+  constructor(useCases) {
+    this.#useCases = useCases;
   }
 
-  // GET /books (?autor=...&isbn=...&sort=...)
-  list = async (req, res) => {
-    const books = await getBooks(req.query, this.#dao);
-    res.json(books);
+  list = async (req, res, next) => {
+    try {
+      const books = await this.#useCases.getBooks(req.query);
+      res.status(200).json(books);
+    } catch (err) {
+      next(err);
+    }
   };
 
-  // GET /books/:id
-  get = async (req, res) => {
-    const book = await getBookById(Number(req.params.id), this.#dao);
-    if (!book) throw new AppError("BOOK_NOT_FOUND", "No existe un libro con ese id", 404);
-    res.json(book);
+  get = async (req, res, next) => {
+    try {
+      const book = await this.#useCases.getBookById(req.params.id);
+      res.status(200).json(book);
+    } catch (err) {
+      next(err);
+    }
   };
 
-  // POST /books
-  create = async (req, res) => {
-    const book = await createBook(req.body, this.#dao);
-    res.status(201).json(book);
+  create = async (req, res, next) => {
+    try {
+      const book = await this.#useCases.createBook(req.body);
+      res.status(201).json(book);
+    } catch (err) {
+      next(err);
+    }
   };
 
-  // PUT /books/:id
-  update = async (req, res) => {
-    const book = await updateBook(Number(req.params.id), req.body, this.#dao);
-    if (!book) throw new AppError("BOOK_NOT_FOUND", "No existe un libro con ese id", 404);
-    res.json(book);
+  update = async (req, res, next) => {
+    try {
+      const book = await this.#useCases.updateBook(req.params.id, req.body);
+      res.status(200).json(book);
+    } catch (err) {
+      next(err);
+    }
   };
 
-  // DELETE /books/:id
-  remove = async (req, res) => {
-    const deleted = await deleteBook(Number(req.params.id), this.#dao);
-    if (!deleted) throw new AppError("BOOK_NOT_FOUND", "No existe un libro con ese id", 404);
-    res.status(204).send();
+  remove = async (req, res, next) => {
+    try {
+      await this.#useCases.deleteBook(req.params.id);
+      res.status(204).end();
+    } catch (err) {
+      next(err);
+    }
   };
 }
 
-export { BooksController };
-export default new BooksController(dao);
+export default BooksController;
