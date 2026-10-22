@@ -1,4 +1,4 @@
-### 1. Obtener todos los libros (semilla inicial en puerto 8000)
+### 1. Obtener todos los libros (semilla inicial)
 GET http://localhost:8000/books
 
 ### 2. Obtener un libro por ID (existente)
@@ -7,10 +7,7 @@ GET http://localhost:8000/books/1
 ### 3. Obtener un libro por ID (inexistente)
 GET http://localhost:8000/books/999
 
-### 4. Intentar obtener un libro con ID inválido (error de validación de parámetro 400)
-GET http://localhost:8000/books/abc
-
-### 5. Crear libro con cuerpo incompleto (error Zod 400)
+### 4. Crear libro con cuerpo incompleto (error Zod 400)
 POST http://localhost:8000/books
 Content-Type: application/json
 
@@ -18,7 +15,7 @@ Content-Type: application/json
   "titulo": "Libro Incompleto"
 }
 
-### 6. Crear libro válido sin ISBN (asigna stock: 0 por defecto)
+### 5. Crear libro válido sin ISBN (asigna stock: 0 por defecto)
 POST http://localhost:8000/books
 Content-Type: application/json
 
@@ -27,7 +24,7 @@ Content-Type: application/json
   "autor": "Julio Cortázar"
 }
 
-### 7. Crear libro válido con ISBN
+### 6. Crear libro válido con ISBN
 POST http://localhost:8000/books
 Content-Type: application/json
 
@@ -38,7 +35,7 @@ Content-Type: application/json
   "stock": 5
 }
 
-### 8. Intentar crear libro con el mismo ISBN (error 409 ISBN_DUPLICATE)
+### 7. Intentar crear libro con el mismo ISBN (error 409 ISBN_DUPLICATE)
 POST http://localhost:8000/books
 Content-Type: application/json
 
@@ -49,7 +46,7 @@ Content-Type: application/json
   "stock": 2
 }
 
-### 9. Actualizar parcialmente un libro (PUT /books/1)
+### 8. Actualizar parcialmente un libro (PUT /books/1)
 PUT http://localhost:8000/books/1
 Content-Type: application/json
 
@@ -57,13 +54,13 @@ Content-Type: application/json
   "stock": 10
 }
 
-### 10. Eliminar un libro (DELETE /books/1 -> 204)
+### 9. Eliminar un libro (DELETE /books/1 -> 204)
 DELETE http://localhost:8000/books/1
 
-### 11. Intentar eliminar el mismo libro nuevamente (404 BOOK_NOT_FOUND)
+### 10. Intentar eliminar el mismo libro nuevamente (404 BOOK_NOT_FOUND)
 DELETE http://localhost:8000/books/1
 
-### 12. Desafío Opcional: Actualizar con stock negativo (error 400 INVALID_STOCK)
+### 11. Desafío Opcional: Actualizar con stock negativo (error 400 INVALID_STOCK)
 PUT http://localhost:8000/books/2
 Content-Type: application/json
 
@@ -71,18 +68,277 @@ Content-Type: application/json
   "stock": -5
 }
 
-### 13. Filtrar libros por autor (?autor=Saint-Exupéry)
+### 12. Filtrar libros por autor (?autor=Saint-Exupéry)
 GET http://localhost:8000/books?autor=Saint-Exupéry
 
-### 14. Ordenar libros por título descendente (?sort=-titulo)
+### 13. Ordenar libros por título descendente (?sort=-titulo)
 GET http://localhost:8000/books?sort=-titulo
 
-### 15. Filtrar por ISBN (?isbn=9789500700122)
+### 14. Filtrar por ISBN (?isbn=9789500700122)
 GET http://localhost:8000/books?isbn=9789500700122
 
-### 16. Paginación de libros (?page=1&limit=1)
-GET http://localhost:8000/books?page=1&limit=1
+### ===================== USERS =====================
 
-### 17. Intentar enviar query params inválidos (error de validación de query 400)
-GET http://localhost:8000/books?limit=-5
+### 15. Listar usuarios
+GET http://localhost:8000/users
 
+### 16. Obtener usuario por ID
+GET http://localhost:8000/users/1
+
+### 17. Usuario inexistente (404 USER_NOT_FOUND)
+GET http://localhost:8000/users/999
+
+### 18. Crear usuario válido (rol por defecto: lector)
+POST http://localhost:8000/users
+Content-Type: application/json
+
+{
+  "nombre": "Ana",
+  "email": "ana@mail.com"
+}
+
+### 19. Email duplicado (409 EMAIL_DUPLICATED)
+POST http://localhost:8000/users
+Content-Type: application/json
+
+{
+  "nombre": "Ana Bis",
+  "email": "ana@mail.com"
+}
+
+### 20. Datos inválidos (400 Zod)
+POST http://localhost:8000/users
+Content-Type: application/json
+
+{
+  "nombre": "A",
+  "email": "no-es-email",
+  "rol": "root"
+}
+
+### 21. Actualizar usuario
+PUT http://localhost:8000/users/1
+Content-Type: application/json
+
+{
+  "nombre": "Administrador"
+}
+
+### 22. Eliminar usuario (204)
+DELETE http://localhost:8000/users/2
+
+
+### ============ CLASE 10: EVENTOS / ALERTAS DE STOCK BAJO (umbral por defecto: 2) ============
+
+### 23. Stock MAYOR al umbral -> NO notifica
+PUT http://localhost:8000/books/1
+Content-Type: application/json
+
+{
+  "stock": 10
+}
+
+### 24. Stock IGUAL al umbral -> notifica
+PUT http://localhost:8000/books/1
+Content-Type: application/json
+
+{
+  "stock": 2
+}
+
+### 25. Stock MENOR al umbral -> notifica
+PUT http://localhost:8000/books/1
+Content-Type: application/json
+
+{
+  "stock": 0
+}
+
+### 26. Solo cambia el título con stock ya bajo -> NO notifica
+PUT http://localhost:8000/books/1
+Content-Type: application/json
+
+{
+  "titulo": "El principito (edición nueva)"
+}
+
+### 27. Crear libro con stock bajo -> notifica
+POST http://localhost:8000/books
+Content-Type: application/json
+
+{
+  "titulo": "Libro con poco stock",
+  "autor": "Autor Test",
+  "stock": 1
+}
+
+### 28. Crear libro con stock alto -> NO notifica
+POST http://localhost:8000/books
+Content-Type: application/json
+
+{
+  "titulo": "Libro con mucho stock",
+  "autor": "Autor Test",
+  "stock": 20
+}
+
+### 29. Libro inexistente -> 404 y NO notifica
+PUT http://localhost:8000/books/999
+Content-Type: application/json
+
+{
+  "stock": 0
+}
+
+### ============ CLASE 10: PRÉSTAMOS (relación N a N usuarios <-> libros) ============
+### Un préstamo descuenta 1 de stock; devolverlo lo repone. Si el stock queda <= umbral, se emite book.lowStock.
+
+### 30. Prestar el libro 1 al usuario 1 (201, stock -1)
+POST http://localhost:8000/loans
+Content-Type: application/json
+
+{
+  "userId": 1,
+  "bookId": 1
+}
+
+### 31. Mismo usuario y mismo libro sin devolver (409 ALREADY_LOANED)
+POST http://localhost:8000/loans
+Content-Type: application/json
+
+{
+  "userId": 1,
+  "bookId": 1
+}
+
+### 32. Otro usuario con el mismo libro (201, mientras haya stock)
+POST http://localhost:8000/loans
+Content-Type: application/json
+
+{
+  "userId": 2,
+  "bookId": 1
+}
+
+### 33. Sin stock disponible (409 OUT_OF_STOCK): repetir hasta agotar el stock del libro
+POST http://localhost:8000/loans
+Content-Type: application/json
+
+{
+  "userId": 3,
+  "bookId": 1
+}
+
+### 34. Usuario inexistente (404 USER_NOT_FOUND)
+POST http://localhost:8000/loans
+Content-Type: application/json
+
+{
+  "userId": 999,
+  "bookId": 1
+}
+
+### 35. Libro inexistente (404 BOOK_NOT_FOUND)
+POST http://localhost:8000/loans
+Content-Type: application/json
+
+{
+  "userId": 1,
+  "bookId": 999
+}
+
+### 36. Datos inválidos (400 Zod)
+POST http://localhost:8000/loans
+Content-Type: application/json
+
+{
+  "userId": "uno"
+}
+
+### 37. Listar todos los préstamos (incluye usuario y libro)
+GET http://localhost:8000/loans
+
+### 38. Libros que tiene un usuario (préstamos sin devolver)
+GET http://localhost:8000/loans?userId=1&activos=true
+
+### 39. Quién tiene un libro
+GET http://localhost:8000/loans?bookId=1&activos=true
+
+### 40. Historial de préstamos ya devueltos
+GET http://localhost:8000/loans?activos=false
+
+### 41. Obtener un préstamo por ID
+GET http://localhost:8000/loans/1
+
+### 42. Devolver un libro (200, stock +1)
+PUT http://localhost:8000/loans/1/return
+
+### 43. Devolver de nuevo (409 ALREADY_RETURNED)
+PUT http://localhost:8000/loans/1/return
+
+### 44. Devolver préstamo inexistente (404 LOAN_NOT_FOUND)
+PUT http://localhost:8000/loans/999/return
+
+### 45. Eliminar usuario con préstamos (409 USER_HAS_LOANS)
+DELETE http://localhost:8000/users/1
+
+### 46. Eliminar libro con préstamos (409 BOOK_HAS_LOANS)
+DELETE http://localhost:8000/books/1
+
+### ============ CLASE 10 (opcional): EVENTO user.created ============
+
+### 47. Crear usuario -> notificación de bienvenida
+POST http://localhost:8000/users
+Content-Type: application/json
+
+{
+  "nombre": "Lucía",
+  "email": "lucia@biblioteca.com"
+}
+
+### 48. Email duplicado (409) -> NO emite user.created
+POST http://localhost:8000/users
+Content-Type: application/json
+
+{
+  "nombre": "Lucía Bis",
+  "email": "lucia@biblioteca.com"
+}
+
+### ============ CLASE 10: CONSULTAS N a N (libros con sus usuarios / usuarios con sus libros) ============
+### Los filtros, el orden y la paginación los resuelve la BD (WHERE / ORDER BY / LIMIT), no un findAll + filter en JS.
+### Preparación: crear un par de usuarios (#18) y prestar el libro 1 a cada uno (#30 y #32); devolver uno (#42) para ver
+### la diferencia entre historial y préstamos activos. En memoria el usuario 1 es el Admin sembrado; en Sequelize no hay semilla de usuarios.
+
+### 49. Libros con los usuarios que los tienen (historial completo)
+GET http://localhost:8000/books?incluir=usuarios
+
+### 50. Libros con sus usuarios, solo préstamos sin devolver
+GET http://localhost:8000/books?incluir=usuarios&activos=true
+
+### 51. Un libro con sus usuarios
+GET http://localhost:8000/books/1?incluir=usuarios&activos=true
+
+### 52. Filtros combinados: autor + orden + paginación + usuarios
+GET http://localhost:8000/books?autor=saint&sort=-titulo&page=1&limit=5&incluir=usuarios
+
+### 53. Filtro inválido (400: sort fuera de las columnas permitidas)
+GET http://localhost:8000/books?sort=precio
+
+### 54. Usuarios con los libros que tienen (historial completo)
+GET http://localhost:8000/users?incluir=libros
+
+### 55. Usuarios con sus libros, solo préstamos sin devolver
+GET http://localhost:8000/users?incluir=libros&activos=true
+
+### 56. Un usuario con sus libros
+GET http://localhost:8000/users/1?incluir=libros&activos=true
+
+### 57. Filtrar usuarios por rol + libros que tienen
+GET http://localhost:8000/users?rol=lector&incluir=libros
+
+### 58. Filtrar usuarios por nombre (parcial) y paginar
+GET http://localhost:8000/users?nombre=an&page=1&limit=10
+
+### 59. Valor inválido (400: incluir solo admite 'libros')
+GET http://localhost:8000/users?incluir=autores

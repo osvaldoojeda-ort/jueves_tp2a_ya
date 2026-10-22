@@ -1,58 +1,50 @@
 import AppError from "../errors/AppError.js";
-import dao from "../dao/booksMemoryDao.js";
-import getBooks from "../usecases/books/getBooks.js";
-import getBookById from "../usecases/books/getBookById.js";
-import createBook from "../usecases/books/createBook.js";
-import updateBook from "../usecases/books/updateBook.js";
-import deleteBook from "../usecases/books/deleteBook.js";
 
 /**
  * Controlador de Libros basado en Clases.
- * Recibe la instancia del DAO a través de Inyección de Dependencias en el constructor.
- * Utiliza propiedades de flecha para preservar la referencia a `this.#dao` al pasarse como middleware en Express.
+ * Recibe el objeto con los casos de uso (preconectados con el DAO por la Factory) a través de Inyección de Dependencias.
+ * No importa ni conoce ningún DAO concreto.
  */
 class BooksController {
-  // El prefijo '#' indica un campo privado de clase (ES2020).
-  // Solo se puede acceder a `#dao` desde dentro de esta clase (encapsulamiento).
-  #dao;
+  #useCases;
 
-  constructor(daoDependency = dao) {
-    this.#dao = daoDependency;
+  constructor(useCases) {
+    this.#useCases = useCases;
   }
 
-  // GET /books (?autor=...&isbn=...&sort=...)
+  // GET /books (?autor=&isbn=&sort=&page=&limit=&incluir=usuarios&activos=)
   list = async (req, res) => {
-    const books = await getBooks(req.query, this.#dao);
+    const books = await this.#useCases.getBooks(req.query);
     res.json(books);
   };
 
   // GET /books/:id
   get = async (req, res) => {
-    const book = await getBookById(Number(req.params.id), this.#dao);
+    const book = await this.#useCases.getBookById(Number(req.params.id), req.query);
     if (!book) throw new AppError("BOOK_NOT_FOUND", "No existe un libro con ese id", 404);
     res.json(book);
   };
 
   // POST /books
   create = async (req, res) => {
-    const book = await createBook(req.body, this.#dao);
+    const book = await this.#useCases.createBook(req.body);
     res.status(201).json(book);
   };
 
   // PUT /books/:id
   update = async (req, res) => {
-    const book = await updateBook(Number(req.params.id), req.body, this.#dao);
+    const book = await this.#useCases.updateBook(Number(req.params.id), req.body);
     if (!book) throw new AppError("BOOK_NOT_FOUND", "No existe un libro con ese id", 404);
     res.json(book);
   };
 
   // DELETE /books/:id
   remove = async (req, res) => {
-    const deleted = await deleteBook(Number(req.params.id), this.#dao);
+    const deleted = await this.#useCases.deleteBook(Number(req.params.id));
     if (!deleted) throw new AppError("BOOK_NOT_FOUND", "No existe un libro con ese id", 404);
     res.status(204).send();
   };
 }
 
-export { BooksController };
-export default new BooksController(dao);
+// Exportamos la clase para permitir que el Composition Root (index.js) la instancie con los casos de uso inyectados
+export default BooksController;

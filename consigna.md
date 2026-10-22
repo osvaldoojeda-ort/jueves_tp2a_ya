@@ -1,115 +1,63 @@
+# Clase 10 — Consigna de Práctica (Tarea Integradora)
 
-# Clase 8 — Consigna de práctica
+En esta clase viste cómo **desacoplar una regla de negocio de sus efectos secundarios** usando `EventEmitter`: el caso de uso **emite un evento** y un módulo aparte **reacciona** enviando una notificación. Todo el cableado vive en el Composition Root (`container/container.js`).
 
-En esta clase llevamos la arquitectura un paso más lejos: eliminamos la necesidad de pasar el `dao` en cada llamada a los casos de uso creando una **Factory de Casos de Uso**. Al terminar, el controlador no importará ningún DAO ni se preocupará por dependencias de almacenamiento.
-
----
-
-## Ejercicio 1 — Factory de Casos de Uso
-
-Crear el archivo `usecases/books/makeBookUseCases.js`.
-
-Debe exportar por defecto una función `makeBookUseCases(dao)` que reciba el adaptador DAO y devuelva un objeto con los 5 casos de uso ya "preconectados" o con el `dao` inyectado:
-
-```js
-import getBooks from "./getBooks.js";
-import getBookById from "./getBookById.js";
-import createBook from "./createBook.js";
-import updateBook from "./updateBook.js";
-import deleteBook from "./deleteBook.js";
-
-function makeBookUseCases(dao) {
-  return {
-    getBooks: (filters) => getBooks(filters, dao),
-    getBookById: (id) => getBookById(id, dao),
-    createBook: (data) => createBook(data, dao),
-    updateBook: (id, changes) => updateBook(id, changes, dao),
-    deleteBook: (id) => deleteBook(id, dao),
-  };
-}
-
-export default makeBookUseCases;
-```
+El objetivo es que construyas un **módulo de alertas por stock bajo** sobre la API de la Clase 9, respetando la Arquitectura en Capas.
 
 ---
 
-## Ejercicio 2 — Refactorizar el Controller
+## Tarea Integrada: Alertas de Stock Bajo
 
-Modificar `controllers/booksController.js`:
+Cuando el stock de un libro quede **igual o por debajo de un umbral**, el sistema debe generar una alerta y notificarla. La actualización del libro **no debe enterarse** de cómo ni por dónde se notifica.
 
-1. Eliminar cualquier `import` que haga referencia a `booksMemoryDao.js` o a casos de uso individuales.
-2. Hacer que la clase `BooksController` reciba en su constructor el objeto `useCases` producido por la Factory.
-3. Actualizar los métodos del controlador para que llamen a `this.#useCases.getBooks(req.query)`, `this.#useCases.createBook(req.body)`, etc., **sin pasar el DAO como argumento**.
-4. Cambiar el `export` final: en la clase 7 el archivo exportaba una instancia ya armada (`export default new BooksController(dao)`), porque el propio archivo conocía el DAO. Ahora que el controller no conoce ninguna dependencia concreta, exportá la **clase** (`export default BooksController;`). Quien la instancia (con los casos de uso ya inyectados) es el Composition Root, no el archivo del controller.
+Sigue estos pasos en orden:
 
----
+### Ejercicio 1: Configuración y nombres de eventos
+1. En `config/config.js` agrega `LOW_STOCK_THRESHOLD`, leído de `process.env.LOW_STOCK_THRESHOLD` con valor por defecto `2`, y expórtalo. Agrégalo también a `.env.example`.
+2. Crea `events/eventNames.js` y exporta un objeto `EVENTS` con al menos `BOOK_LOW_STOCK: "book.lowStock"`.
+3. Crea `events/eventBus.js` con una función `createEventBus()` que retorne una nueva instancia de `EventEmitter` (`node:events`).
 
-## Ejercicio 3 — Ensamblado en el Composition Root (`index.js`)
+### Ejercicio 2: Notificador (el efecto secundario)
+1. Crea `notifications/consoleNotifier.js` que exporte un objeto con el método `async notify({ subject, body })`, el cual imprime la notificación por consola con un prefijo `[NOTIFICACIÓN]`.
+2. Crea `notifications/fileNotifier.js` con **la misma firma**, pero que agregue cada notificación como una línea a un archivo `notifications.log` (usa `node:fs/promises`, `appendFile`). Agrega `notifications.log` al `.gitignore`.
+3. Responde en un comentario al inicio de `fileNotifier.js`: ¿por qué el listener de alertas no necesita cambiar si pasamos de un notificador al otro?
 
-Como vimos en el teórico (sección 5), el **Composition Root es el único lugar de la aplicación donde se instancian y conectan los componentes concretos** — y ese lugar es `index.js`, no `routes/`. Ni `routes/booksRoutes.js` ni `controllers/booksController.js` deben importar el DAO.
+### Ejercicio 3: Módulo de alertas (el listener)
+1. Crea `alerts/registerAlertListeners.js` con la función `registerAlertListeners(bus, notifier)`.
+2. Dentro, escucha `EVENTS.BOOK_LOW_STOCK` y llama a `notifier.notify` con un asunto y un cuerpo que incluyan el título del libro y el stock restante.
+3. El listener **debe capturar sus propios errores** (`try/catch`) y registrarlos con `console.error` sin relanzarlos.
 
-1. En `index.js`, importar el DAO (`booksMemoryDao.js`), la Factory (`makeBookUseCases.js`) y la clase `BooksController`.
-2. Instanciar los casos de uso: `const bookUseCases = makeBookUseCases(dao);`
-3. Instanciar el controlador pasándole los casos de uso: `const booksController = new BooksController(bookUseCases);`
-4. Convertir `routes/booksRoutes.js` en una función que recibe el controlador ya armado y devuelve el router, en vez de importar un controlador singleton:
+### Ejercicio 4: Emitir el evento desde el dominio
+1. Modifica `usecases/books/makeBookUseCases.js` para que reciba un tercer parámetro: `events` (el bus), junto con `dao` y `usersDao`.
+2. En `usecases/books/updateBook.js` recibe `events` y, **después** de actualizar con éxito, emite `EVENTS.BOOK_LOW_STOCK` si `stock <= LOW_STOCK_THRESHOLD`. El payload debe ser un objeto plano con `id`, `titulo` y `stock`.
+3. Aplica la misma regla en `createBook.js` (un libro puede nacer con stock bajo).
+4. Verifica que **no se emita** el evento si:
+   - El libro no existe (`update` devolvió `null`).
+   - El cambio no incluye `stock` (por ejemplo, solo se modificó el título) y el libro ya estaba con stock bajo.
+5. Pregunta para reflexionar (respóndela en un comentario en `updateBook.js`): ¿por qué leer el umbral desde `config` dentro del caso de uso es aceptable, pero instanciar el notificador ahí **no** lo es?
 
-   ```js
-   // routes/booksRoutes.js
-   import express from "express";
-   import validate from "../middlewares/validate.js";
-   import { createBookSchema, updateBookSchema } from "../schemas/bookSchema.js";
+### Ejercicio 5: Inyección en el Contenedor
+Ve al archivo `container/container.js`.
+1. Crea el bus con `createEventBus()`.
+2. Elige el notificador (`consoleNotifier` o `fileNotifier`) según una variable de entorno `NOTIFIER_TYPE` (`console` por defecto, `file` para archivo). Puedes resolverlo con una pequeña factory `notifications/notifierFactory.js`, igual que `daoFactory`.
+3. Registra los listeners con `registerAlertListeners(events, notifier)`.
+4. Pasa `events` a `makeBookUseCases(booksDao, usersDao, events)`.
 
-   function createBooksRouter(controller) {
-     const router = express.Router();
+### Ejercicio 6: Verificación Funcional
+1. Agrega a `requests.http` un bloque con peticiones que:
+   - Actualicen un libro con stock **mayor** al umbral (no debe haber notificación).
+   - Actualicen un libro con stock **igual** al umbral (debe haber notificación).
+   - Actualicen un libro con stock **menor** al umbral (debe haber notificación).
+   - Creen un libro con stock bajo (debe haber notificación).
+   - Actualicen solo el `titulo` de un libro con stock bajo (**no** debe haber notificación).
+2. Arranca la aplicación con `PERSISTENCE_TYPE=memory` y verifica los avisos en la consola.
+3. Arranca con `PERSISTENCE_TYPE=sequelize` y `NOTIFIER_TYPE=file` y verifica que se escriba `notifications.log`.
+4. Comprueba que, si el notificador lanza un error (haz que `fileNotifier` falle a propósito, por ejemplo con una ruta inválida), la petición `PUT /books/:id` **igual responde 200** y el libro queda actualizado.
 
-     router.get("/", controller.list);
-     router.get("/:id", controller.get);
-     router.post("/", validate(createBookSchema), controller.create);
-     router.put("/:id", validate(updateBookSchema), controller.update);
-     router.delete("/:id", controller.remove);
+### Ejercicio 7 (Opcional Avanzado): Segundo evento
+1. Agrega `USER_CREATED: "user.created"` a `EVENTS`.
+2. Emite el evento desde `usecases/users/createUser.js` (inyectando `events` en `makeUserUseCases`) con un payload que contenga `id`, `nombre` y `email`.
+3. Registra un segundo listener que envíe una notificación de bienvenida por el mismo `notifier`.
+4. Pregunta para reflexionar: ¿qué cambió en `updateBook` o en el notificador para soportar este nuevo evento? (Respuesta esperada: nada.)
 
-     return router;
-   }
-
-   export default createBooksRouter;
-   ```
-5. Actualizar `routes/index.js` para que reciba el controlador desde afuera y se lo pase a `createBooksRouter`:
-
-   ```js
-   // routes/index.js
-   import { Router } from "express";
-   import createBooksRouter from "./booksRoutes.js";
-
-   function createRouter(booksController) {
-     const router = Router();
-     router.use("/books", createBooksRouter(booksController));
-     return router;
-   }
-
-   export default createRouter;
-   ```
-6. En `index.js`, pasar el `booksController` ya armado a `createRouter(booksController)` y montar el resultado con `app.use(...)`, tal como muestra el diagrama de la sección 5 del teórico.
-
----
-
-## Ejercicio 4 — Verificación
-
-Ejecutar las pruebas en `requests.http`:
-
-1. `GET /books`
-2. `GET /books/1`
-3. `POST /books` con body incompleto (400)
-4. `POST /books` válido (201)
-5. `POST /books` duplicado (409)
-6. `PUT /books/1` parcial (200)
-7. `PUT /books/1` con stock negativo (400)
-8. `DELETE /books/1` (204)
-
-**Criterio de éxito:** Todas las peticiones deben responder exactamente igual que en la Clase 7. El comportamiento externo es idéntico, pero el controlador ahora está 100% desacoplado de la infraestructura.
-
----
-
-## Desafío opcional
-
-1. **Decorador de Logger en Factory**: En `makeBookUseCases.js`, agregar un `console.log` dentro de cada función que indique qué caso de uso se está ejecutando (ejemplo: `console.log("[UseCase] Executing createBook...")`). Probar realizar peticiones HTTP y observar el log en consola.
-2. **DAO Falso Intercambiable**: En `index.js`, crear un DAO falso provisional y pasárselo a la factory en lugar de `booksMemoryDao`. Verificar que la aplicación arranca e interactúa con el nuevo adaptador sin tocar controladores.
+¡Éxitos! La próxima clase avanzamos hacia Seguridad (JWT).
