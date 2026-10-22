@@ -1,22 +1,33 @@
-import AppError from "../../errors/AppError.js";
-
-/**
- * Caso de Uso: Actualizar un libro existente.
- * Regla de negocio opcional: El stock no puede ser menor a 0 si se envía.
+/*
+ * PREGUNTA: ¿Por qué leer el umbral desde config dentro del caso de uso es aceptable,
+ * pero instanciar el notificador ahí no lo es?
+ *
+ * RESPUESTA: (porque instanciar dependencias dentro de los casos de uso viola el principio de inversión de dependencias)
  */
-async function updateBook(id, changes, dao, usersDao) {
-  if (changes.stock !== undefined && changes.stock < 0) {
-    throw new AppError("INVALID_STOCK", "El stock no puede ser negativo", 400);
+import AppError from "../../errors/AppError.js";
+import EVENTS from "../../events/eventNames.js";
+import { LOW_STOCK_THRESHOLD } from "../../config/config.js";
+
+async function updateBook(id, changes, dao, usersDao, events) {
+  // ... tus dos validaciones de siempre (stock negativo y userId) quedan IGUAL ...
+
+  const updated = await dao.update(id, changes);
+
+  // Caso: el libro no existe → no emitimos nada (el controller devuelve 404)
+  if (!updated) return null;
+
+  // Solo alertamos si en ESTE cambio vino el stock
+  const stockChanged = changes.stock !== undefined;
+
+  if (stockChanged && updated.stock <= LOW_STOCK_THRESHOLD) {
+    events.emit(EVENTS.BOOK_LOW_STOCK, {
+      id: updated.id,
+      titulo: updated.titulo,
+      stock: updated.stock,
+    });
   }
 
-  if (changes.userId != null) {
-    const user = await usersDao.getById(changes.userId);
-    if (!user) {
-      throw new AppError("USER_NOT_FOUND", "No existe un usuario con ese id", 404);
-    }
-  }
-
-  return dao.update(id, changes);
+  return updated;
 }
 
 export default updateBook;

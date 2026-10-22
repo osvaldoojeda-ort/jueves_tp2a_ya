@@ -8,11 +8,11 @@ import deleteUser from "./deleteUser.js";
  * Factory de Casos de Uso para Usuarios.
  * Recibe el DAO e inyecta la dependencia en cada caso de uso.
  */
-function makeUserUseCases(dao) {
+function makeUserUseCases(dao, events) {
   return {
     getUsers: () => getUsers(dao),
     getUserById: (id) => getUserById(id, dao),
-    createUser: (data) => createUser(data, dao),
+    createUser: (data) => createUser(data, dao, events),
     updateUser: (id, changes) => updateUser(id, changes, dao),
     deleteUser: (id) => deleteUser(id, dao),
   };

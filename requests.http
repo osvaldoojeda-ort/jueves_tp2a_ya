@@ -126,3 +126,48 @@ Content-Type: application/json
 
 ### 22. Eliminar usuario (204)
 DELETE http://localhost:8000/users/2
+
+### ===================== CLASE 10: ALERTAS DE STOCK BAJO (umbral = 2) =====================
+
+### 23. Stock MAYOR al umbral → NO debe haber notificación
+PUT http://localhost:8000/books/2
+Content-Type: application/json
+
+{
+  "stock": 10
+}
+
+### 24. Stock IGUAL al umbral → SÍ debe haber notificación
+PUT http://localhost:8000/books/2
+Content-Type: application/json
+
+{
+  "stock": 2
+}
+
+### 25. Stock MENOR al umbral → SÍ debe haber notificación
+PUT http://localhost:8000/books/2
+Content-Type: application/json
+
+{
+  "stock": 1
+}
+
+### 26. Crear libro con stock bajo → SÍ debe haber notificación
+POST http://localhost:8000/books
+Content-Type: application/json
+
+{
+  "titulo": "El Aleph",
+  "autor": "Jorge Luis Borges",
+  "stock": 1
+}
+
+### 27. Solo título de un libro con stock bajo → NO debe haber notificación
+### (el libro 2 quedó con stock 1 en la request 25)
+PUT http://localhost:8000/books/2
+Content-Type: application/json
+
+{
+  "titulo": "Cien años de soledad (ed. aniversario)"
+}
