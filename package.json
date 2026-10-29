@@ -1,18 +1,33 @@
 {
-  "name": "biblioteca-api-eventos",
+  "name": "biblioteca-api-jwt",
   "version": "1.0.0",
-  "description": "API REST de Biblioteca — Persistencia Intercambiable (Sequelize / SQLite) e IoC (Clase 10)",
+  "description": "API REST de Biblioteca — Autenticación con JWT y contraseñas hasheadas con bcrypt (Clase 11)",
   "type": "module",
   "main": "index.js",
   "scripts": {
     "start": "node --env-file=.env index.js",
     "dev": "node --env-file=.env --watch index.js"
   },
-  "keywords": ["express", "rest-api", "node", "zod", "dao", "sequelize", "sqlite", "ioc"],
+  "keywords": [
+    "express",
+    "rest-api",
+    "node",
+    "zod",
+    "dao",
+    "sequelize",
+    "sqlite",
+    "ioc",
+    "jwt",
+    "bcrypt",
+    "auth"
+  ],
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "bcryptjs": "^3.0.3",
     "express": "^5.2.1",
+    "express-rate-limit": "^8.7.1",
+    "jsonwebtoken": "^9.0.3",
     "sequelize": "^6.37.5",
     "sqlite3": "^5.1.7",
     "zod": "^4.5.4"

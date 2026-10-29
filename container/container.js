@@ -11,6 +11,14 @@ import createLoansRouter from "../routes/loansRoutes.js";
 import createEventBus from "../events/eventBus.js";
 import { getNotifier } from "../notifications/notifierFactory.js";
 import registerAlertListeners from "../alerts/registerAlertListeners.js";
+import createPasswordHasher from "../security/passwordHasher.js";
+import createTokenService from "../security/tokenService.js";
+import createAuthMiddlewares from "../middlewares/auth.js";
+import makeAuthUseCases from "../usecases/auth/makeAuthUseCases.js";
+import seedAdmin from "../usecases/auth/seedAdmin.js";
+import AuthController from "../controllers/AuthController.js";
+import createAuthRouter from "../routes/authRoutes.js";
+import { JWT_SECRET, JWT_EXPIRES_IN, BCRYPT_ROUNDS, ADMIN_EMAIL, ADMIN_PASSWORD } from "../config/config.js";
 import { Router } from "express";
 
 /**
@@ -42,6 +50,14 @@ async function buildContainer() {
   const events = createEventBus();
   registerAlertListeners(events, getNotifier());
 
+  // Seguridad: hasheador de contraseñas, servicio de tokens y middlewares de auth
+  const hasher = createPasswordHasher({ rounds: BCRYPT_ROUNDS });
+  const tokens = createTokenService({ secret: JWT_SECRET, expiresIn: JWT_EXPIRES_IN });
+  const auth = createAuthMiddlewares(tokens);
+
+  // Administrador inicial (si no existe) para poder iniciar sesión por primera vez
+  await seedAdmin({ email: ADMIN_EMAIL, password: ADMIN_PASSWORD }, usersDao, hasher);
+
   // 2. Inyectamos los DAOs y el bus en las Factories de Casos de Uso
   const bookUseCases = makeBookUseCases(booksDao, loansDao, events);
 
@@ -50,15 +66,19 @@ async function buildContainer() {
 
   // 4. Inyectamos los Controladores en los Routers
   const router = Router();
-  router.use("/books", createBooksRouter(booksController));
+  router.use("/books", createBooksRouter(booksController, auth));
 
   // Entidad Users
-  const usersController = new UsersController(makeUserUseCases(usersDao, loansDao, events));
-  router.use("/users", createUsersRouter(usersController));
+  const usersController = new UsersController(makeUserUseCases(usersDao, loansDao, events, hasher));
+  router.use("/users", createUsersRouter(usersController, auth));
+
+  // Autenticación: registro, login y perfil
+  const authController = new AuthController(makeAuthUseCases({ usersDao, loansDao, events, hasher, tokens }));
+  router.use("/auth", createAuthRouter(authController, auth));
 
   // Entidad Loans
   const loansController = new LoansController(makeLoanUseCases({ loansDao, booksDao, usersDao, events }));
-  router.use("/loans", createLoansRouter(loansController));
+  router.use("/loans", createLoansRouter(loansController, auth));
 
   // Retornamos el router principal listo para ser usado por Express
   return router;

@@ -2,7 +2,8 @@ import { Op } from "sequelize";
 import { UserModel } from "../models/index.js";
 
 // Columnas pedidas explícitamente: sin `attributes` Sequelize hace SELECT * y traería TODAS las columnas
-// (el día que exista `password` saldría en cada respuesta). Todas las lecturas de este DAO la usan.
+// (`passwordHash` saldría en cada respuesta). Todas las lecturas de este DAO la usan.
+// El hash solo se lee con getCredentialsByEmail, que existe únicamente para el login.
 const USER_ATTRIBUTES = ["id", "nombre", "email", "rol"];
 
 /**
@@ -44,6 +45,15 @@ class UsersSequelizeDao {
     return user ? user.get({ plain: true }) : null;
   }
 
+  // Credenciales para el login: es el ÚNICO método que devuelve el hash de la contraseña
+  async getCredentialsByEmail(email) {
+    const user = await UserModel.findOne({
+      where: { email },
+      attributes: [...USER_ATTRIBUTES, "passwordHash"],
+    });
+    return user ? user.get({ plain: true }) : null;
+  }
+
   async save(data) {
     const { id: _ignored, ...userData } = data;
     const newUser = await UserModel.create(userData);
@@ -57,7 +67,8 @@ class UsersSequelizeDao {
 
     const { id: _ignored, ...allowedChanges } = changes;
     await user.update(allowedChanges);
-    return user.get({ plain: true });
+    // Se relee con las columnas permitidas: si el cambio incluía passwordHash, la instancia lo trae cargado
+    return this.getById(id);
   }
 
   async delete(id) {

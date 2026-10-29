@@ -1,14 +1,21 @@
 /**
  * Adaptador DAO en memoria para Usuarios.
  * Respeta la misma interfaz pública que UsersSequelizeDao.
+ * Guarda `passwordHash` pero nunca lo devuelve, salvo en getCredentialsByEmail (para el login).
  */
 class UsersMemoryDao {
   #users;
   #nextId;
 
-  constructor(initialUsers = [{ id: 1, nombre: "Admin", email: "admin@biblioteca.com", rol: "admin" }]) {
+  // El administrador inicial lo siembra el contenedor (necesita hashear su contraseña)
+  constructor(initialUsers = []) {
     this.#users = [...initialUsers];
     this.#nextId = this.#users.reduce((max, u) => (u.id > max ? u.id : max), 0) + 1;
+  }
+
+  // Copia del usuario sin el hash de la contraseña
+  #toPublic({ passwordHash: _hidden, ...user }) {
+    return user;
   }
 
   // filters: { nombre, email, rol, page, limit }
@@ -22,22 +29,30 @@ class UsersMemoryDao {
 
     if (limit) users = users.slice((page - 1) * limit, page * limit);
 
-    return users.map((u) => ({ ...u }));
+    return users.map((u) => this.#toPublic(u));
   }
 
   async getById(id) {
-    return this.#users.find((u) => u.id === Number(id)) ?? null;
+    const user = this.#users.find((u) => u.id === Number(id));
+    return user ? this.#toPublic(user) : null;
   }
 
   async getByEmail(email) {
-    return this.#users.find((u) => u.email === email) ?? null;
+    const user = this.#users.find((u) => u.email === email);
+    return user ? this.#toPublic(user) : null;
+  }
+
+  // Credenciales para el login: es el ÚNICO método que devuelve el hash de la contraseña
+  async getCredentialsByEmail(email) {
+    const user = this.#users.find((u) => u.email === email);
+    return user ? { ...user } : null;
   }
 
   async save(data) {
     const { id: _ignored, ...userData } = data;
     const newUser = { id: this.#nextId++, ...userData };
     this.#users.push(newUser);
-    return newUser;
+    return this.#toPublic(newUser);
   }
 
   async update(id, changes) {
@@ -46,7 +61,7 @@ class UsersMemoryDao {
 
     const { id: _ignored, ...allowedChanges } = changes;
     this.#users[index] = { ...this.#users[index], ...allowedChanges };
-    return this.#users[index];
+    return this.#toPublic(this.#users[index]);
   }
 
   async delete(id) {

@@ -26,6 +26,11 @@ UserModel.init(
         isEmail: { msg: "Debe ser un correo electrónico válido" },
       },
     },
+    // Hash bcrypt de la contraseña (nunca la contraseña en texto plano). Los DAOs no lo devuelven en las lecturas comunes.
+    passwordHash: {
+      type: DataTypes.STRING,
+      allowNull: false,
+    },
     rol: {
       type: DataTypes.STRING,
       defaultValue: "lector", // 'lector' o 'admin'

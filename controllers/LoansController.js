@@ -13,25 +13,25 @@ class LoansController {
 
   // GET /loans?userId=&bookId=&activos=
   list = async (req, res) => {
-    res.json(await this.#useCases.getLoans(req.query));
+    res.json(await this.#useCases.getLoans(req.query, req.user));
   };
 
   // GET /loans/:id
   get = async (req, res) => {
-    const loan = await this.#useCases.getLoanById(Number(req.params.id));
+    const loan = await this.#useCases.getLoanById(Number(req.params.id), req.user);
     if (!loan) throw new AppError("LOAN_NOT_FOUND", "No existe un préstamo con ese id", 404);
     res.json(loan);
   };
 
   // POST /loans
   create = async (req, res) => {
-    const loan = await this.#useCases.createLoan(req.body);
+    const loan = await this.#useCases.createLoan(req.body, req.user);
     res.status(201).json(loan);
   };
 
   // PUT /loans/:id/return
   giveBack = async (req, res) => {
-    const loan = await this.#useCases.returnLoan(Number(req.params.id));
+    const loan = await this.#useCases.returnLoan(Number(req.params.id), req.user);
     res.json(loan);
   };
 }

@@ -1,4 +1,3 @@
-
 # Clase 11 — Consigna de Práctica (Tarea Integradora)
 
 En esta clase viste cómo **guardar contraseñas con hash (bcrypt)**, cómo **emitir y verificar tokens JWT**, y cómo separar **autenticación** de **autorización**. Todo el cableado vive en el Composition Root (`container/container.js`), igual que el DAO y el sistema de eventos.
@@ -77,7 +76,7 @@ Un `lector` solo puede operar sobre **sus propios** préstamos. Pasa `req.user` 
 
 ### Ejercicio 9: Verificación Funcional
 
-1. Ejecuta el bloque `A1` a `A20` de `requests.http` (necesitas la extensión REST Client) y verifica cada código de respuesta que indica el título.
+1. Ejecuta el bloque `A1` a `A20` de `requests.http` (y `A21` a `A25` si hiciste el ejercicio 10) (necesitas la extensión REST Client) y verifica cada código de respuesta que indica el título.
 2. Confirma que en **ninguna** respuesta aparece `passwordHash`.
 3. Arranca con `PERSISTENCE_TYPE=memory` y repite con `PERSISTENCE_TYPE=sequelize`. El resultado debe ser idéntico.
 4. Abre la base `database.sqlite` (por ejemplo con la extensión SQLite de VSCode) y comprueba que la columna `passwordHash` guarda un hash que empieza con `$2`, no la contraseña.

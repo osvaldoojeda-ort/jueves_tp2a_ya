@@ -4,8 +4,9 @@ const id = (label) =>
   z.number({ error: `${label} debe ser un número` }).int(`${label} debe ser un entero`).positive(`${label} debe ser positivo`);
 
 // Esquema para POST /loans
+// userId es opcional: por defecto el préstamo es para quien hace el pedido (solo un admin puede indicar otro usuario)
 const createLoanSchema = z.object({
-  userId: id("userId"),
+  userId: id("userId").optional(),
   bookId: id("bookId"),
 });
 

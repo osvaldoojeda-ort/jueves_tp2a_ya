@@ -9,10 +9,10 @@ import returnLoan from "./returnLoan.js";
  */
 function makeLoanUseCases({ loansDao, booksDao, usersDao, events }) {
   return {
-    getLoans: (filters) => getLoans(filters, loansDao),
-    getLoanById: (id) => getLoanById(id, loansDao),
-    createLoan: (data) => createLoan(data, loansDao, booksDao, usersDao, events),
-    returnLoan: (id) => returnLoan(id, loansDao),
+    getLoans: (filters, actor) => getLoans(filters, actor, loansDao),
+    getLoanById: (id, actor) => getLoanById(id, actor, loansDao),
+    createLoan: (data, actor) => createLoan(data, actor, loansDao, booksDao, usersDao, events),
+    returnLoan: (id, actor) => returnLoan(id, actor, loansDao),
   };
 }
 

@@ -10,16 +10,17 @@ import {
 
 /**
  * Factory de Router para Libros.
- * Recibe el controlador ya instanciado (con los casos de uso inyectados) y configura los endpoints.
+ * Recibe el controlador ya instanciado (con los casos de uso inyectados) y los middlewares de auth.
+ * Lectura pública; escritura solo para administradores.
  */
-function createBooksRouter(controller) {
+function createBooksRouter(controller, { authenticate, authorize }) {
   const router = express.Router();
 
   router.get("/", validateQuery(queryBooksSchema), controller.list);
   router.get("/:id", validateParams(bookIdParamSchema), validateQuery(queryBookByIdSchema), controller.get);
-  router.post("/", validate(createBookSchema), controller.create);
-  router.put("/:id", validateParams(bookIdParamSchema), validate(updateBookSchema), controller.update);
-  router.delete("/:id", validateParams(bookIdParamSchema), controller.remove);
+  router.post("/", authenticate, authorize("admin"), validate(createBookSchema), controller.create);
+  router.put("/:id", authenticate, authorize("admin"), validateParams(bookIdParamSchema), validate(updateBookSchema), controller.update);
+  router.delete("/:id", authenticate, authorize("admin"), validateParams(bookIdParamSchema), controller.remove);
 
   return router;
 }

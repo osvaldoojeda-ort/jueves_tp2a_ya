@@ -1,4 +1,3 @@
-
 # Clase 11 — Seguridad: contraseñas con hash y autenticación con JWT
 
 ## Objetivos de la clase
@@ -51,23 +50,61 @@ Podés verlo en la terminal:
 
 ```js
 // concepts.js
-import { createHash, createCipheriv, randomBytes, createHmac } from "node:crypto";
+import {
+  createHash,
+  createCipheriv,
+  createDecipheriv,
+  randomBytes,
+  createHmac,
+  timingSafeEqual,
+} from "node:crypto";
 
 // 1. Encoding: base64 se revierte con una línea, no hay secreto
 const encoded = Buffer.from("hola").toString("base64");
-console.log(encoded, Buffer.from(encoded, "base64").toString()); // aG9sYQ== hola
+const decoded = Buffer.from(encoded, "base64").toString();
+console.log("encoding:", encoded, "→", decoded); // aG9sYQ== → hola
 
-// 2. Hash: mismo input, mismo output, y no hay forma de volver
-console.log(createHash("sha256").update("hola").digest("hex"));
+// 2. Hash: mismo input, mismo output, y no hay forma de volver. Solo se puede VERIFICAR.
+const sha = (text) => createHash("sha256").update(text).digest("hex");
+const stored = sha("hola");
+console.log("hash:", stored);
+console.log("¿'hola' coincide?", sha("hola") === stored);   // true
+console.log("¿'Hola' coincide?", sha("Hola") === stored);   // false: cambiar una letra cambia todo el hash
 
-// 3. Encriptación: con la clave se recupera el original
+// 3. Encriptación: con la clave se recupera el original (es reversible a propósito)
 const key = randomBytes(32);
 const iv = randomBytes(16);
 const cipher = createCipheriv("aes-256-cbc", key, iv);
-console.log(cipher.update("hola", "utf8", "hex") + cipher.final("hex"));
+const encrypted = cipher.update("hola", "utf8", "hex") + cipher.final("hex");
+console.log("encriptado:", encrypted);
+
+const decipher = createDecipheriv("aes-256-cbc", key, iv);
+const recovered = decipher.update(encrypted, "hex", "utf8") + decipher.final("utf8");
+console.log("desencriptado con la clave:", recovered); // hola
+
+// Con otra clave NO se puede recuperar
+try {
+  const wrong = createDecipheriv("aes-256-cbc", randomBytes(32), iv);
+  const garbage = wrong.update(encrypted, "hex", "utf8") + wrong.final("utf8");
+  console.log("con otra clave: basura, no el original →", JSON.stringify(garbage));
+} catch {
+  console.log("con otra clave: error, no se recupera");
+}
 
 // 4. Firma (HMAC): el texto queda visible, pero no se puede alterar sin la clave
-console.log(createHmac("sha256", "mi-secreto").update("hola").digest("hex"));
+const sign = (text, secret) => createHmac("sha256", secret).update(text).digest("hex");
+const verify = (text, signature, secret) => {
+  const expected = Buffer.from(sign(text, secret));
+  const received = Buffer.from(signature);
+  // timingSafeEqual compara en tiempo constante (no revela cuántos caracteres coinciden)
+  return expected.length === received.length && timingSafeEqual(expected, received);
+};
+
+const signature = sign("hola", "mi-secreto");
+console.log("firma:", signature);
+console.log("¿válida?", verify("hola", signature, "mi-secreto"));            // true
+console.log("¿texto alterado?", verify("hola!", signature, "mi-secreto"));   // false
+console.log("¿otro secreto?", verify("hola", signature, "secreto-falso"));   // false
 ```
 
 La regla que hay que llevarse: **una contraseña nunca se encripta, se hashea**. Si la encriptaras, alguien con la clave (o que robe la base y la clave juntas) podría leer todas. Con un hash, ni siquiera nosotros podemos saber cuál era la contraseña: solo podemos verificar si la que nos mandan produce el mismo hash.
@@ -83,7 +120,7 @@ SHA-256 está diseñado para ser **rápido**: una placa de video calcula miles d
 Hay dos defensas, y bcrypt trae las dos:
 
 - **Salt**: un valor aleatorio distinto por cada usuario que se mezcla con la contraseña antes de hashear. Dos usuarios con la contraseña `Clave12345` terminan con hashes distintos, y un atacante no puede usar tablas precalculadas.
-- **Costo ajustable (rounds)**: el hash es **lento a propósito**. Con cada `+1` de costo el cálculo tarda el doble. 10 rondas son unos ~70 ms: imperceptible para un login, inviable para probar millones de combinaciones.
+- **Costo ajustable (rounds)**: el hash es **lento a propósito**. Con cada `+1` de costo el cálculo tarda el doble. 10 rondas son unas decenas de milisegundos (según la máquina): imperceptible para un login, inviable para probar millones de combinaciones. Podés medirlo con `node scripts/hashDemo.js`, que además muestra por qué dos hashes de la misma contraseña son distintos.
 
 ### Anatomía de un hash bcrypt
 
@@ -125,6 +162,26 @@ Fijate que `createPasswordHasher` no lo importan los casos de uso: se crea en el
 - El caso de uso depende de un contrato (`hash()` y `compare()`), no de bcryptjs.
 - En la clase 14, al testear, le pasamos un hasheador falso que responde al instante.
 - Si mañana se migra a argon2, cambia un archivo.
+
+### ¿Y el hook `beforeCreate` de Sequelize?
+
+Sequelize permite hashear dentro del modelo con un hook, y es la forma que muestra su documentación:
+
+```js
+UserModel.beforeCreate(async (user) => {
+  user.password = await bcrypt.hash(user.password, 10);
+});
+```
+
+Es cómodo, pero acá lo evitamos por varias razones:
+
+- **Rompe el DAO intercambiable (clase 9).** El hook vive en el modelo de Sequelize. Con `PERSISTENCE_TYPE=memory` ese modelo no existe, y las contraseñas se guardarían en **texto plano**. Habría que repetir el hasheo en cada adaptador.
+- **Esconde una regla de seguridad en el ORM.** Leyendo `createUser` no se ve que se hashea.
+- **No se puede testear sin Sequelize.** Con el hasheador inyectado, en la clase 14 probamos `createUser` con uno falso, sin base de datos.
+- **Tiene trampas.** `beforeCreate` no corre en `bulkCreate` ni en `Model.update` estático (salvo `individualHooks: true`), y en `beforeUpdate` hay que chequear `user.changed("password")` o se vuelve a hashear un hash ya hasheado.
+- **No resuelve el login.** El `compare` igual tiene que hacerse fuera del modelo.
+
+Si un proyecto está atado a un solo ORM y nunca va a cambiar de backend, el hook es una opción válida. Para este curso, donde la persistencia es intercambiable, el hasheo va en el caso de uso.
 
 ### Nunca devolver el hash
 
@@ -319,7 +376,30 @@ async function loginUser({ email, password }, dao, hasher, tokens) {
 
 Fijate en el detalle del **mismo error** cuando el email no existe y cuando la contraseña está mal. Si dijéramos "ese email no existe", cualquiera podría usar el login para averiguar qué personas tienen cuenta. Es un principio general: *no des más información de la necesaria a quien todavía no se autenticó*.
 
-*(Mejora de nivel avanzado: cuando el email no existe, el servidor responde más rápido porque se saltea bcrypt. Un atacante cronometrando puede distinguir los casos. Se resuelve comparando contra un hash falso de todas formas. Para el curso alcanza con saber que existe.)*
+Y hay una filtración más sutil: si el email no existe y nos salteamos bcrypt, la respuesta llega mucho más rápido que cuando el email sí existe, y un atacante que cronometre puede distinguir los casos. Por eso `loginUser` compara **siempre**: si no encuentra al usuario, lo hace contra un hash falso (`dummyHash`, creado una vez en `makeAuthUseCases`). Ambos casos tardan lo mismo.
+
+### Frenar la fuerza bruta
+
+Un atacante puede probar contraseñas una tras otra. `express-rate-limit` corta los intentos desde una misma IP:
+
+```js
+// routes/authRoutes.js
+const loginLimiter = rateLimit({
+  windowMs: 60_000,
+  limit: LOGIN_RATE_LIMIT_MAX,     // 5 por defecto
+  skipSuccessfulRequests: true,    // solo cuentan los intentos fallidos
+  handler: (req, res, next) =>
+    next(new AppError("TOO_MANY_ATTEMPTS", "Demasiados intentos fallidos, probá de nuevo en un minuto", 429)),
+});
+
+router.post("/login", loginLimiter, validate(loginSchema), controller.login);
+```
+
+El `handler` pasa el error por `next(...)`, así la respuesta 429 tiene el mismo formato que el resto de la API.
+
+### Cambiar la contraseña
+
+`PUT /auth/password` exige el token **y además la contraseña actual**. Así, quien encuentre una sesión abierta o robe un token no puede cambiarla y dejar afuera al dueño. El caso de uso `changePassword` verifica la actual con `hasher.compare` y guarda el nuevo hash.
 
 ### Registro
 
@@ -409,8 +489,8 @@ En `usersRoutes.js` se usa `router.use(authenticate, authorize("admin"))` al pri
 | `POST` / `PUT` / `DELETE /books`        | Solo `admin`                                                   |
 | `/users` (todo)                             | Solo `admin`                                                   |
 | `/loans` (todo)                             | Cualquier usuario autenticado, con reglas por dueño (ver abajo) |
-| `POST /auth/register`, `POST /auth/login` | Público                                                         |
-| `GET /auth/me`                              | Cualquier usuario autenticado                                    |
+| `POST /auth/register`, `POST /auth/login` | Público (el login limita los intentos fallidos)                 |
+| `GET /auth/me`, `PUT /auth/password`      | Cualquier usuario autenticado                                    |
 
 ---
 
@@ -487,7 +567,7 @@ Nada de esto cambia los casos de uso de libros ni el sistema de eventos de la cl
 
 - **Refresh tokens**: un token corto (15 min) para operar y otro largo para pedir uno nuevo sin volver a loguearse. Resuelve el compromiso entre "vida corta" y "no molestar al usuario".
 - **Revocación / logout real**: requiere guardar una lista de tokens inválidos (o versionar los tokens), y con eso se pierde parte de lo "sin estado".
-- **Rate limiting** en el login, para frenar fuerza bruta (`express-rate-limit`).
+- **Rate limiting más fino**: el límite del login es por IP; detrás de un proxy o balanceador hay que configurar `trust proxy`, y en producción se suele limitar también por cuenta.
 - **HTTPS**: sin él, el token viaja en claro por la red. Es obligatorio en producción.
 - **Firmas asimétricas (RS256)**: el servidor firma con una clave privada y otros servicios verifican con la pública.
 
