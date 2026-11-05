@@ -52,6 +52,23 @@ const queryBooksSchema = z.object({
   limit: z.coerce.number().int("El límite debe ser un entero").positive("El límite debe ser mayor a 0").max(100, "El límite máximo es 100").optional(),
 });
 
+// Esquema para req.query en GET /books/export.csv: los mismos filtros del listado + enriquecer con el catálogo externo
+const exportBooksQuerySchema = queryBooksSchema
+  .pick({ autor: true, author: true, isbn: true, sort: true, page: true, limit: true })
+  .extend({
+    enriquecer: activosSchema.optional(), // "true" / "false"
+    separador: z.enum([",", ";"], { error: "separador debe ser ',' o ';'" }).default(","), // ";" para Excel en español
+  });
+
+// Esquema para POST /books/import (hasta 10 ISBN por pedido: cada uno es un pedido HTTP a la API externa)
+const importBooksSchema = z.object({
+  isbns: z
+    .array(fields.isbn, { error: "isbns debe ser un arreglo de ISBN" })
+    .min(1, "Enviá al menos un ISBN")
+    .max(10, "Se pueden importar hasta 10 ISBN por pedido"),
+  stock: fields.stock.nonnegative("El stock no puede ser negativo").default(3),
+});
+
 // Esquema para req.query en GET /books/:id
 const queryBookByIdSchema = z.object({
   incluir: z.enum(["usuarios"], { error: "incluir solo admite 'usuarios'" }).optional(),
@@ -69,5 +86,7 @@ export {
   paginationSchema,
   queryBooksSchema,
   queryBookByIdSchema,
+  exportBooksQuerySchema,
+  importBooksSchema,
   bookIdParamSchema,
 };

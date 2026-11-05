@@ -8,8 +8,8 @@ class BooksMemoryDao {
   #nextId;
 
   constructor(initialBooks = [
-    { id: 1, titulo: "El principito", autor: "Saint-Exupéry", isbn: null, stock: 3 },
-    { id: 2, titulo: "Cien años de soledad", autor: "García Márquez", isbn: null, stock: 1 },
+    { id: 1, titulo: "El principito", autor: "Saint-Exupéry", isbn: "9780156012195", stock: 3 },
+    { id: 2, titulo: "Cien años de soledad", autor: "García Márquez", isbn: "9780060883287", stock: 1 },
   ]) {
     this.#books = [...initialBooks];
     this.#updateNextId();

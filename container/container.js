@@ -19,6 +19,11 @@ import seedAdmin from "../usecases/auth/seedAdmin.js";
 import AuthController from "../controllers/AuthController.js";
 import createAuthRouter from "../routes/authRoutes.js";
 import { JWT_SECRET, JWT_EXPIRES_IN, BCRYPT_ROUNDS, ADMIN_EMAIL, ADMIN_PASSWORD } from "../config/config.js";
+import { getCatalog } from "../gateways/catalogFactory.js";
+import makeCatalogUseCases from "../usecases/catalog/makeCatalogUseCases.js";
+import CatalogController from "../controllers/CatalogController.js";
+import createCatalogRouter from "../routes/catalogRoutes.js";
+import { IMPORT_CONCURRENCY } from "../config/config.js";
 import { Router } from "express";
 
 /**
@@ -59,7 +64,10 @@ async function buildContainer() {
   await seedAdmin({ email: ADMIN_EMAIL, password: ADMIN_PASSWORD }, usersDao, hasher);
 
   // 2. Inyectamos los DAOs y el bus en las Factories de Casos de Uso
-  const bookUseCases = makeBookUseCases(booksDao, loansDao, events);
+  // Catálogo externo: gateway real (Open Library) o falso, según CATALOG_TYPE
+  const catalog = getCatalog();
+
+  const bookUseCases = makeBookUseCases(booksDao, loansDao, events, catalog, { importConcurrency: IMPORT_CONCURRENCY });
 
   // 3. Inyectamos los Casos de Uso en los Controladores
   const booksController = new BooksController(bookUseCases);
@@ -67,6 +75,10 @@ async function buildContainer() {
   // 4. Inyectamos los Controladores en los Routers
   const router = Router();
   router.use("/books", createBooksRouter(booksController, auth));
+
+  // Entidad Catalog (consultas a la API externa)
+  const catalogController = new CatalogController(makeCatalogUseCases(catalog));
+  router.use("/catalog", createCatalogRouter(catalogController, auth));
 
   // Entidad Users
   const usersController = new UsersController(makeUserUseCases(usersDao, loansDao, events, hasher));

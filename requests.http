@@ -612,3 +612,128 @@ Content-Type: application/json
   "email": "carla@mail.com",
   "password": "incorrecta"
 }
+
+
+### ============ CLASE 12: CATÁLOGO EXTERNO (Open Library) Y CSV ============
+### Requiere haber ejecutado el login del admin (#A1) al inicio del archivo.
+### Para probar sin internet: CATALOG_TYPE=fake. En el catálogo fake, un ISBN que empieza con 000 simula un error 500.
+### ISBN de prueba: 9780156012195 (El principito), 9780060883287 (Cien años de soledad), 9780140328721 (Fantastic Mr. Fox),
+### 9780802130303 (Ficciones). El 9789500700122 no existe en Open Library (sirve para probar "no encontrado").
+
+### B1. Detalle de un libro con ISBN: libro local + datos del catálogo (200, externalStatus: "ok")
+GET http://localhost:8000/books/1/details
+Authorization: Bearer {{adminToken}}
+
+### B2. Detalle de un libro inexistente (404 BOOK_NOT_FOUND)
+GET http://localhost:8000/books/999/details
+Authorization: Bearer {{adminToken}}
+
+### B3. Detalle sin token (401 TOKEN_MISSING): cada pedido gasta un pedido a un tercero
+GET http://localhost:8000/books/1/details
+
+### B4. Crear un libro SIN ISBN (guarda su id para el siguiente pedido)
+# @name bookWithoutIsbn
+POST http://localhost:8000/books
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{
+  "titulo": "Libro sin ISBN",
+  "autor": "Autor Test",
+  "stock": 5
+}
+
+### B5. Detalle de un libro sin ISBN (200, externalStatus: "no_isbn", sin llamar a la red)
+GET http://localhost:8000/books/{{bookWithoutIsbn.response.body.id}}/details
+Authorization: Bearer {{adminToken}}
+
+### B6. Consultar 5 ISBN en modo SECUENCIAL (mirá httpRequests y elapsedMs)
+GET http://localhost:8000/catalog/lookup?mode=sequential&isbns=9780156012195,9780060883287,9780140328721,9780802130303,9789500700122
+Authorization: Bearer {{adminToken}}
+
+### B7. Los mismos 5 ISBN en PARALELO (mismo resultado, mucho menos tiempo)
+GET http://localhost:8000/catalog/lookup?mode=parallel&isbns=9780156012195,9780060883287,9780140328721,9780802130303,9789500700122
+Authorization: Bearer {{adminToken}}
+
+### B8. Los mismos 5 ISBN en LOTE (un solo pedido HTTP)
+GET http://localhost:8000/catalog/lookup?mode=batch&isbns=9780156012195,9780060883287,9780140328721,9780802130303,9789500700122
+Authorization: Bearer {{adminToken}}
+
+### B9. Con un ISBN que falla (solo catálogo fake): en parallel falla UNO, en batch fallan TODOS (probá con mode=batch)
+GET http://localhost:8000/catalog/lookup?mode=parallel&isbns=9780156012195,0001234567890,9780140328721
+Authorization: Bearer {{adminToken}}
+
+### B10. ISBN inválido (400 Zod: debe tener 13 dígitos)
+GET http://localhost:8000/catalog/lookup?isbns=123
+Authorization: Bearer {{adminToken}}
+
+### B11. Consultar el catálogo sin token (401)
+GET http://localhost:8000/catalog/lookup?isbns=9780156012195
+
+### B12. Importar libros desde el catálogo (informe: imported / skipped / notFound / failed)
+POST http://localhost:8000/books/import
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{
+  "isbns": ["9780140328721", "9780802130303", "9780156012195", "9789500700122", "9780140328721"],
+  "stock": 3
+}
+
+### B13. Repetir la importación: ya existen, todos quedan en "skipped" (no se consulta la red por ellos)
+POST http://localhost:8000/books/import
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{
+  "isbns": ["9780140328721", "9780802130303"]
+}
+
+### B14. Importar como lectora (403 FORBIDDEN)
+POST http://localhost:8000/books/import
+Authorization: Bearer {{readerToken}}
+Content-Type: application/json
+
+{
+  "isbns": ["9780140328721"]
+}
+
+### B15. Importar sin ISBN o con más de 10 (400 Zod)
+POST http://localhost:8000/books/import
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{
+  "isbns": []
+}
+
+### B16. Exportar los libros a CSV (se descarga; probá también pegando la URL en el navegador)
+GET http://localhost:8000/books/export.csv
+Authorization: Bearer {{adminToken}}
+
+### B17. Exportar con los filtros del listado: autor + orden descendente por título
+GET http://localhost:8000/books/export.csv?autor=a&sort=-titulo
+Authorization: Bearer {{adminToken}}
+
+### B18. Exportar enriquecido con datos del catálogo (editorial, páginas, fecha de publicación) en UN solo pedido en lote
+GET http://localhost:8000/books/export.csv?enriquecer=true
+Authorization: Bearer {{adminToken}}
+
+### B19. Exportar como lectora (403)
+GET http://localhost:8000/books/export.csv
+Authorization: Bearer {{readerToken}}
+
+### B20. Exportar sin token (401)
+GET http://localhost:8000/books/export.csv
+
+### B21. (Opcional) Exportar con separador ";" para que Excel en español lo abra en columnas
+GET http://localhost:8000/books/export.csv?enriquecer=true&separador=;
+Authorization: Bearer {{adminToken}}
+
+### B22. (Opcional) Separador inválido (400 Zod)
+GET http://localhost:8000/books/export.csv?separador=x
+Authorization: Bearer {{adminToken}}
+
+### B23. (Opcional) Caché: arrancá con CATALOG_CACHE_TTL_MS=600000, ejecutá este pedido dos veces seguidas y compará el tiempo (la segunda sale de la caché)
+GET http://localhost:8000/books/2/details
+Authorization: Bearer {{adminToken}}

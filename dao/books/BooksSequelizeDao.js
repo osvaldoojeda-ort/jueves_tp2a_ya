@@ -18,8 +18,8 @@ class BooksSequelizeDao {
     const count = await BookModel.count();
     if (count === 0) {
       await BookModel.bulkCreate([
-        { titulo: "El principito", autor: "Saint-Exupéry", stock: 3 },
-        { titulo: "Cien años de soledad", autor: "García Márquez", stock: 1 },
+        { titulo: "El principito", autor: "Saint-Exupéry", isbn: "9780156012195", stock: 3 },
+        { titulo: "Cien años de soledad", autor: "García Márquez", isbn: "9780060883287", stock: 1 },
       ]);
     }
   }

@@ -25,6 +25,26 @@ class BooksController {
     res.json(book);
   };
 
+  // GET /books/:id/details (libro + datos del catálogo externo)
+  details = async (req, res) => {
+    const book = await this.#useCases.getBookDetails(Number(req.params.id));
+    if (!book) throw new AppError("BOOK_NOT_FOUND", "No existe un libro con ese id", 404);
+    res.json(book);
+  };
+
+  // POST /books/import (importa libros desde el catálogo externo por ISBN)
+  import = async (req, res) => {
+    res.json(await this.#useCases.importBooks(req.body));
+  };
+
+  // GET /books/export.csv (?autor=&sort=&enriquecer=true)
+  exportCsv = async (req, res) => {
+    const { csv, filename, enrichment } = await this.#useCases.exportBooksCsv(req.query);
+    res.set("X-Enrichment", enrichment); // ok | unavailable | skipped: si el catálogo externo no respondió, se avisa acá
+    res.attachment(filename); // Content-Disposition: attachment (el navegador lo descarga) + Content-Type: text/csv
+    res.send(csv);
+  };
+
   // POST /books
   create = async (req, res) => {
     const book = await this.#useCases.createBook(req.body);

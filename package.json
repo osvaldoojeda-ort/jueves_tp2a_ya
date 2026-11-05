@@ -1,7 +1,7 @@
 {
-  "name": "biblioteca-api-jwt",
+  "name": "biblioteca-api-externa",
   "version": "1.0.0",
-  "description": "API REST de Biblioteca — Autenticación con JWT y contraseñas hasheadas con bcrypt (Clase 11)",
+  "description": "API REST de Biblioteca — Consumo de una API externa (Open Library) y exportación a CSV (Clase 12)",
   "type": "module",
   "main": "index.js",
   "scripts": {
@@ -19,7 +19,10 @@
     "ioc",
     "jwt",
     "bcrypt",
-    "auth"
+    "auth",
+    "fetch",
+    "csv",
+    "open-library"
   ],
   "author": "",
   "license": "ISC",

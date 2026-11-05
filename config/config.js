@@ -25,6 +25,16 @@ const BCRYPT_ROUNDS = Number(process.env.BCRYPT_ROUNDS) || 10; // costo del hash
 // Máximo de intentos de login FALLIDOS por IP y por minuto (los exitosos no cuentan)
 const LOGIN_RATE_LIMIT_MAX = Number(process.env.LOGIN_RATE_LIMIT_MAX) || 5;
 
+// --- Consumo de APIs externas (Clase 12) ---
+const CATALOG_TYPE = process.env.CATALOG_TYPE || "openlibrary"; // "openlibrary" (real) o "fake" (offline, para clase y tests)
+const OPEN_LIBRARY_URL = process.env.OPEN_LIBRARY_URL || "https://openlibrary.org";
+const EXTERNAL_TIMEOUT_MS = Number(process.env.EXTERNAL_TIMEOUT_MS) || 5000; // tiempo máximo de espera por pedido externo
+const IMPORT_CONCURRENCY = Number(process.env.IMPORT_CONCURRENCY) || 3; // pedidos externos simultáneos al importar
+const CATALOG_CACHE_TTL_MS = Number(process.env.CATALOG_CACHE_TTL_MS ?? 0); // caché del gateway real en ms (0 = apagada; con caché, la comparación secuencial/paralelo/lote deja de ser honesta)
+const EXTERNAL_RETRIES = Number(process.env.EXTERNAL_RETRIES ?? 0); // reintentos ante fallas transitorias (0 = sin reintentos)
+const EXTERNAL_RETRY_BASE_MS = Number(process.env.EXTERNAL_RETRY_BASE_MS) || 1000; // espera inicial: se duplica en cada reintento
+const FAKE_LATENCY_MS = Number(process.env.FAKE_LATENCY_MS) || 300; // demora simulada por pedido del catálogo fake
+
 // Administrador inicial (se siembra al arrancar si no existe). Sin ADMIN_PASSWORD no se siembra.
 const ADMIN_EMAIL = process.env.ADMIN_EMAIL || "admin@biblioteca.com";
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD;
@@ -39,6 +49,14 @@ export {
   JWT_EXPIRES_IN,
   BCRYPT_ROUNDS,
   LOGIN_RATE_LIMIT_MAX,
+  CATALOG_TYPE,
+  OPEN_LIBRARY_URL,
+  EXTERNAL_TIMEOUT_MS,
+  IMPORT_CONCURRENCY,
+  CATALOG_CACHE_TTL_MS,
+  EXTERNAL_RETRIES,
+  EXTERNAL_RETRY_BASE_MS,
+  FAKE_LATENCY_MS,
   ADMIN_EMAIL,
   ADMIN_PASSWORD,
 };
