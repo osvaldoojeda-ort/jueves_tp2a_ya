@@ -23,7 +23,9 @@ import { getCatalog } from "../gateways/catalogFactory.js";
 import makeCatalogUseCases from "../usecases/catalog/makeCatalogUseCases.js";
 import CatalogController from "../controllers/CatalogController.js";
 import createCatalogRouter from "../routes/catalogRoutes.js";
-import { IMPORT_CONCURRENCY } from "../config/config.js";
+import { IMPORT_CONCURRENCY, LOW_STOCK_THRESHOLD, LOAN_MAX_ACTIVE, LOAN_BUSINESS_DAYS, LOAN_MAX_RENEWALS, CLOCK_NOW } from "../config/config.js";
+import createClock from "../utils/clock.js";
+import { getHolidaysGateway } from "../gateways/holidaysFactory.js";
 import { Router } from "express";
 
 /**
@@ -89,7 +91,18 @@ async function buildContainer() {
   router.use("/auth", createAuthRouter(authController, auth));
 
   // Entidad Loans
-  const loansController = new LoansController(makeLoanUseCases({ loansDao, booksDao, usersDao, events }));
+  // Clase 13: reloj (real o fijo para "viajar en el tiempo"), feriados (API real o falsa) y los números de las reglas
+  const clock = createClock({ fixedNow: CLOCK_NOW });
+  if (CLOCK_NOW) console.log(`[Reloj] Fijo en ${CLOCK_NOW} (hoy = ${clock.today()})`);
+  const holidays = getHolidaysGateway();
+  const loanRules = {
+    maxActive: LOAN_MAX_ACTIVE, // R1
+    businessDays: LOAN_BUSINESS_DAYS, // R2
+    maxRenewals: LOAN_MAX_RENEWALS, // R4
+  };
+  const loansController = new LoansController(
+    makeLoanUseCases({ loansDao, booksDao, usersDao, events, clock, holidays, loanRules, lowStockThreshold: LOW_STOCK_THRESHOLD })
+  );
   router.use("/loans", createLoansRouter(loansController, auth));
 
   // Retornamos el router principal listo para ser usado por Express

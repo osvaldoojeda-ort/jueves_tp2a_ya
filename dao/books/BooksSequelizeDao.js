@@ -11,8 +11,11 @@ const BOOK_ATTRIBUTES = ["id", "titulo", "autor", "isbn", "stock"];
 class BooksSequelizeDao {
   // Inicialización de la base de datos (creación de tablas y datos semilla)
   async init() {
-    // Sincroniza el modelo con la BD. En producción no se usa force: true ni alter: true, se usan migraciones.
-    await sequelize.sync({ alter: true });
+    // Crea las tablas que no existan. NO usa `alter: true`: en SQLite, alter recrea las tablas (users y books) y, por las
+    // claves foráneas con ON DELETE CASCADE, borra los préstamos en cada reinicio del servidor. Además, con un índice
+    // único compuesto, deja las columnas como UNIQUE. Si cambia el esquema de un modelo, en desarrollo se borra
+    // database.sqlite; en producción se usan migraciones.
+    await sequelize.sync();
 
     // Siembra de datos si la tabla está vacía
     const count = await BookModel.count();

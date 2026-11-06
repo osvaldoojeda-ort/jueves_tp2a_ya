@@ -13,6 +13,7 @@ function createLoansRouter(controller, { authenticate }) {
   router.get("/:id", authenticate, validateParams(loanIdParamSchema), controller.get);
   router.post("/", authenticate, validate(createLoanSchema), controller.create);
   router.put("/:id/return", authenticate, validateParams(loanIdParamSchema), controller.giveBack);
+  router.put("/:id/renew", authenticate, validateParams(loanIdParamSchema), controller.renew);
 
   return router;
 }

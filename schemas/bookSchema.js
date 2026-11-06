@@ -1,11 +1,17 @@
 import { z } from "zod";
 import { activosSchema } from "./loanSchema.js";
+import { hasValidIsbn13Checksum } from "../utils/isbn.js";
 
 // Definición de campos reutilizables
 const fields = {
   titulo: z.string({ error: "El título es obligatorio" }).min(1, "El título no puede estar vacío"),
   autor: z.string({ error: "El autor es obligatorio" }).min(1, "El autor no puede estar vacío"),
-  isbn: z.string().regex(/^\d{13}$/, "El ISBN debe tener exactamente 13 dígitos"),
+  // Dos pasos encadenados (Clase 13): primero la forma (13 dígitos) y recién después la cuenta del dígito de control.
+  // Sigue siendo una validación de FORMA: se decide mirando solo el dato, sin consultar nada.
+  isbn: z
+    .string()
+    .regex(/^\d{13}$/, "El ISBN debe tener exactamente 13 dígitos")
+    .refine(hasValidIsbn13Checksum, "El ISBN tiene un dígito de control inválido"),
   stock: z
     .number({ error: "El stock debe ser un número" })
     .int("El stock debe ser un número entero"),

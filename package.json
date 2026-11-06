@@ -1,7 +1,7 @@
 {
-  "name": "biblioteca-api-externa",
+  "name": "biblioteca-reglas-negocio",
   "version": "1.0.0",
-  "description": "API REST de Biblioteca — Consumo de una API externa (Open Library) y exportación a CSV (Clase 12)",
+  "description": "API REST de Biblioteca — Reglas de negocio, validaciones cruzadas y status codes (Clase 13)",
   "type": "module",
   "main": "index.js",
   "scripts": {

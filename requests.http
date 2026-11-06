@@ -737,3 +737,190 @@ Authorization: Bearer {{adminToken}}
 ### B23. (Opcional) Caché: arrancá con CATALOG_CACHE_TTL_MS=600000, ejecutá este pedido dos veces seguidas y compará el tiempo (la segunda sale de la caché)
 GET http://localhost:8000/books/2/details
 Authorization: Bearer {{adminToken}}
+
+### ============ CLASE 13: REGLAS DE NEGOCIO, VALIDACIONES CRUZADAS Y STATUS CODES ============
+### Requiere el login del admin (#A1) y el de la lectora Carla (#A5).
+### Esta sección crea su propia socia (Sofía) y sus propios libros, así no depende de lo que hiciste antes.
+### Reglas: R1 máx. 3 préstamos activos · R2 vencimiento a 10 días hábiles · R3 con vencidos no se pide más ·
+###         R4 una sola renovación · R5 ISBN con dígito de control válido.
+### Los pasos C20+ piden REINICIAR el servidor: usá PERSISTENCE_TYPE=sequelize (en memoria se pierde todo).
+### Si tenés un database.sqlite de una clase anterior, borralo antes de arrancar (el modelo de préstamos cambió).
+
+### C1. Registrar a la socia Sofía
+POST http://localhost:8000/auth/register
+Content-Type: application/json
+
+{
+  "nombre": "Sofía",
+  "email": "sofia@mail.com",
+  "password": "Sofia12345"
+}
+
+### C2. Login de Sofía (guarda su token)
+# @name loginSofia
+POST http://localhost:8000/auth/login
+Content-Type: application/json
+
+{
+  "email": "sofia@mail.com",
+  "password": "Sofia12345"
+}
+
+###
+@sofiaToken = {{loginSofia.response.body.token}}
+
+### C3. R5: ISBN con 13 dígitos pero dígito de control inválido (400 VALIDATION_ERROR, regla de FORMA)
+POST http://localhost:8000/books
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{
+  "titulo": "El principito (ISBN mal tipeado)",
+  "autor": "Saint-Exupéry",
+  "isbn": "9780156012196"
+}
+
+### C4. R5: ISBN válido (201). Guarda el libro como "libroA"
+# @name libroA
+POST http://localhost:8000/books
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{
+  "titulo": "Rayuela",
+  "autor": "Julio Cortázar",
+  "isbn": "9789875660014",
+  "stock": 2
+}
+
+### C5. Libro B
+# @name libroB
+POST http://localhost:8000/books
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{ "titulo": "El Aleph", "autor": "Jorge Luis Borges", "stock": 2 }
+
+### C6. Libro C
+# @name libroC
+POST http://localhost:8000/books
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{ "titulo": "Bestiario", "autor": "Julio Cortázar", "stock": 2 }
+
+### C7. Libro D
+# @name libroD
+POST http://localhost:8000/books
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{ "titulo": "Sobre héroes y tumbas", "autor": "Ernesto Sabato", "stock": 5 }
+
+### C8. R1 + R2: Sofía pide el libro A (201). Mirá fechaVencimiento (10 días HÁBILES), estado, holidaysAvailable
+### y el header Location
+# @name prestamoA
+POST http://localhost:8000/loans
+Authorization: Bearer {{sofiaToken}}
+Content-Type: application/json
+
+{ "bookId": {{libroA.response.body.id}} }
+
+### C9. Sofía pide el libro B (201, segundo préstamo)
+# @name prestamoB
+POST http://localhost:8000/loans
+Authorization: Bearer {{sofiaToken}}
+Content-Type: application/json
+
+{ "bookId": {{libroB.response.body.id}} }
+
+### C10. R1 borde: Sofía pide el libro C (201, tercer préstamo: justo el límite)
+# @name prestamoC
+POST http://localhost:8000/loans
+Authorization: Bearer {{sofiaToken}}
+Content-Type: application/json
+
+{ "bookId": {{libroC.response.body.id}} }
+
+### C11. R1 violada: Sofía pide el libro D (409 LOAN_LIMIT_REACHED)
+POST http://localhost:8000/loans
+Authorization: Bearer {{sofiaToken}}
+Content-Type: application/json
+
+{ "bookId": {{libroD.response.body.id}} }
+
+### C12. Tras el rechazo, el estado NO cambió: el libro D sigue con stock 5
+GET http://localhost:8000/books/{{libroD.response.body.id}}
+
+### C13. R4: renovar el préstamo A (200). renovaciones: 1 y el vencimiento se corre 10 días hábiles desde el ANTERIOR
+PUT http://localhost:8000/loans/{{prestamoA.response.body.id}}/renew
+Authorization: Bearer {{sofiaToken}}
+
+### C14. R4: renovarlo otra vez (409 RENEWAL_LIMIT_REACHED)
+PUT http://localhost:8000/loans/{{prestamoA.response.body.id}}/renew
+Authorization: Bearer {{sofiaToken}}
+
+### C15. Renovar un préstamo ajeno (403 FORBIDDEN): Carla intenta renovar el de Sofía
+PUT http://localhost:8000/loans/{{prestamoB.response.body.id}}/renew
+Authorization: Bearer {{readerToken}}
+
+### C16. Renovar un préstamo inexistente (404 LOAN_NOT_FOUND): la existencia se chequea ANTES que el permiso
+PUT http://localhost:8000/loans/999999/renew
+Authorization: Bearer {{sofiaToken}}
+
+### C17. Devolver el préstamo B (200, estado: "devuelto", atrasoAlDevolver: 0)
+PUT http://localhost:8000/loans/{{prestamoB.response.body.id}}/return
+Authorization: Bearer {{sofiaToken}}
+
+### C18. Renovar un préstamo ya devuelto (409 ALREADY_RETURNED)
+PUT http://localhost:8000/loans/{{prestamoB.response.body.id}}/renew
+Authorization: Bearer {{sofiaToken}}
+
+### C19. Volver a pedir el libro B ya devuelto (201): el índice único es PARCIAL, solo mira los préstamos activos
+POST http://localhost:8000/loans
+Authorization: Bearer {{sofiaToken}}
+Content-Type: application/json
+
+{ "bookId": {{libroB.response.body.id}} }
+
+### C20. Validación cruzada con refine: 'desde' posterior a 'hasta' (400, el error aparece en el campo "desde")
+GET http://localhost:8000/loans?desde=2026-12-01&hasta=2026-11-01
+Authorization: Bearer {{adminToken}}
+
+### C21. Fecha con formato inválido (400)
+GET http://localhost:8000/loans?desde=01/11/2026
+Authorization: Bearer {{adminToken}}
+
+### C22. Rango válido: préstamos hechos en noviembre de 2026 (200; cada uno trae estado y diasAtraso calculados)
+GET http://localhost:8000/loans?desde=2026-11-01&hasta=2026-11-30
+Authorization: Bearer {{adminToken}}
+
+### C23. Degradación elegante: REINICIÁ el servidor con HOLIDAYS_TYPE=fake-down (o con HOLIDAYS_URL=http://localhost:9922)
+### y prestá un libro a Carla. Responde 201 con holidaysAvailable: false (vencimiento calculado solo con fines de semana)
+POST http://localhost:8000/loans
+Authorization: Bearer {{readerToken}}
+Content-Type: application/json
+
+{ "bookId": {{libroD.response.body.id}} }
+
+### ---- Viaje en el tiempo: REINICIÁ el servidor con CLOCK_NOW en una fecha posterior a los vencimientos ----
+### (ej. CLOCK_NOW=2027-01-15T12:00:00Z npm start). Los tokens siguen valiendo: su vencimiento usa la hora real.
+
+### C24. R3 calculado: los préstamos de Sofía aparecen con estado "vencido" y diasAtraso > 0 (nada se actualizó en la base)
+GET http://localhost:8000/loans?activos=true
+Authorization: Bearer {{sofiaToken}}
+
+### C25. R3: con préstamos vencidos no se pide otro libro (409 USER_HAS_OVERDUE_LOANS, con el detalle de cuáles)
+POST http://localhost:8000/loans
+Authorization: Bearer {{sofiaToken}}
+Content-Type: application/json
+
+{ "bookId": {{libroD.response.body.id}} }
+
+### C26. R4: un préstamo vencido no se renueva (409 LOAN_OVERDUE)
+PUT http://localhost:8000/loans/{{prestamoC.response.body.id}}/renew
+Authorization: Bearer {{sofiaToken}}
+
+### C27. Pero SÍ se devuelve (200, atrasoAlDevolver > 0)
+PUT http://localhost:8000/loans/{{prestamoC.response.body.id}}/return
+Authorization: Bearer {{sofiaToken}}

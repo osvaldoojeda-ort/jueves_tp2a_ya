@@ -35,6 +35,17 @@ const EXTERNAL_RETRIES = Number(process.env.EXTERNAL_RETRIES ?? 0); // reintento
 const EXTERNAL_RETRY_BASE_MS = Number(process.env.EXTERNAL_RETRY_BASE_MS) || 1000; // espera inicial: se duplica en cada reintento
 const FAKE_LATENCY_MS = Number(process.env.FAKE_LATENCY_MS) || 300; // demora simulada por pedido del catálogo fake
 
+// --- Reglas de negocio de préstamos (Clase 13) ---
+// Los números de las reglas son CONFIGURACIÓN, no código: si la biblioteca decide que el tope es 5, se cambia una variable.
+const LOAN_MAX_ACTIVE = Number(process.env.LOAN_MAX_ACTIVE) || 3; // R1: préstamos activos por usuario
+const LOAN_BUSINESS_DAYS = Number(process.env.LOAN_BUSINESS_DAYS) || 10; // R2: plazo en días hábiles
+const LOAN_MAX_RENEWALS = Number(process.env.LOAN_MAX_RENEWALS ?? 1); // R4: renovaciones permitidas por préstamo
+// Reloj fijo para "viajar en el tiempo" al probar a mano (ej. 2026-12-01T12:00:00Z). Vacío = hora real.
+const CLOCK_NOW = process.env.CLOCK_NOW || undefined;
+// Feriados: "argentinadatos" (API real), "fake" (datos locales) o "fake-down" (simula la API caída)
+const HOLIDAYS_TYPE = process.env.HOLIDAYS_TYPE || "argentinadatos";
+const HOLIDAYS_URL = process.env.HOLIDAYS_URL || "https://api.argentinadatos.com";
+
 // Administrador inicial (se siembra al arrancar si no existe). Sin ADMIN_PASSWORD no se siembra.
 const ADMIN_EMAIL = process.env.ADMIN_EMAIL || "admin@biblioteca.com";
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD;
@@ -57,6 +68,12 @@ export {
   EXTERNAL_RETRIES,
   EXTERNAL_RETRY_BASE_MS,
   FAKE_LATENCY_MS,
+  LOAN_MAX_ACTIVE,
+  LOAN_BUSINESS_DAYS,
+  LOAN_MAX_RENEWALS,
+  CLOCK_NOW,
+  HOLIDAYS_TYPE,
+  HOLIDAYS_URL,
   ADMIN_EMAIL,
   ADMIN_PASSWORD,
 };
