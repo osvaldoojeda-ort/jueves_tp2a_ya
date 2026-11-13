@@ -1,5 +1,4 @@
 import AppError from "../../errors/AppError.js";
-import { LOW_STOCK_THRESHOLD } from "../../config/config.js";
 import EVENTS from "../../events/eventNames.js";
 
 /**
@@ -7,6 +6,10 @@ import EVENTS from "../../events/eventNames.js";
  * Regla de negocio opcional: El stock no puede ser menor a 0 si se envía.
  * Efecto secundario desacoplado: si el cambio deja el stock bajo, emite "book.lowStock".
  * No sabe quién escucha ni qué se hace con el aviso (mail, log, etc.).
+ *
+ * Clase 14: el umbral ahora llega inyectado (`lowStockThreshold`) en lugar de importarse de config.js
+ * (importar config.js obligaba a definir JWT_SECRET hasta para testear un libro). La reflexión de la clase 10
+ * sigue valiendo: el umbral es una regla del caso de uso; solo cambia DE DÓNDE la recibe.
  *
  * Reflexión: ¿por qué leer LOW_STOCK_THRESHOLD desde config es aceptable acá, pero instanciar el notificador no?
  * - El umbral es una REGLA DE NEGOCIO ("cuándo el stock se considera bajo"): decide si hay que emitir el evento,
@@ -16,7 +19,7 @@ import EVENTS from "../../events/eventNames.js";
  *   acoplado al canal y habría que tocar la regla para cambiarlo. Por eso solo emite el evento, y el
  *   contenedor decide quién escucha.
  */
-async function updateBook(id, changes, dao, events) {
+async function updateBook(id, changes, dao, events, lowStockThreshold) {
   if (changes.stock !== undefined && changes.stock < 0) {
     throw new AppError("INVALID_STOCK", "El stock no puede ser negativo", 400);
   }
@@ -24,7 +27,7 @@ async function updateBook(id, changes, dao, events) {
   const updated = await dao.update(id, changes);
 
   // Solo si el cambio incluyó stock: evita avisar de nuevo al editar, por ejemplo, el título
-  if (updated && changes.stock !== undefined && updated.stock <= LOW_STOCK_THRESHOLD) {
+  if (updated && changes.stock !== undefined && updated.stock <= lowStockThreshold) {
     events.emit(EVENTS.BOOK_LOW_STOCK, { id: updated.id, titulo: updated.titulo, stock: updated.stock });
   }
 
