@@ -13,6 +13,16 @@ import { getNotifier } from "../notifications/notifierFactory.js";
 import registerAlertListeners from "../alerts/registerAlertListeners.js";
 import { Router } from "express";
 
+// ← NUEVO: seguridad (Clase 11)
+import { JWT_SECRET, JWT_EXPIRES_IN, BCRYPT_ROUNDS, ADMIN_EMAIL, ADMIN_PASSWORD } from "../config/config.js";
+import { createPasswordHasher } from "../security/passwordHasher.js";
+import { createTokenService } from "../security/tokenService.js";
+import createAuthMiddlewares from "../middlewares/auth.js";
+import makeAuthUseCases from "../usecases/auth/makeAuthUseCases.js";
+import seedAdmin from "../usecases/auth/seedAdmin.js";
+import AuthController from "../controllers/AuthController.js";
+import createAuthRouter from "../routes/authRoutes.js";
+
 /**
  * Composition Root Centralizado.
  * Este módulo se encarga de resolver las dependencias de toda la aplicación,
@@ -21,8 +31,6 @@ import { Router } from "express";
 async function buildContainer() {
   // 1. Instanciamos o resolvemos los DAOs
   const booksDao = getBooksDao();
-
-  // Si el DAO seleccionado tiene un método init (ej. Sequelize), lo ejecutamos
   if (typeof booksDao.init === "function") {
     await booksDao.init();
   }
@@ -42,23 +50,35 @@ async function buildContainer() {
   const events = createEventBus();
   registerAlertListeners(events, getNotifier());
 
+  // ← NUEVO: seguridad. Único lugar que conoce las implementaciones concretas.
+  const hasher = createPasswordHasher({ rounds: BCRYPT_ROUNDS });
+  const tokens = createTokenService({ secret: JWT_SECRET, expiresIn: JWT_EXPIRES_IN });
+  const auth = createAuthMiddlewares(tokens);
+
+  // ← NUEVO: admin inicial, DESPUÉS de inicializar los DAOs y el bus de eventos
+  await seedAdmin({ email: ADMIN_EMAIL, password: ADMIN_PASSWORD }, usersDao, events, hasher);
+
   // 2. Inyectamos los DAOs y el bus en las Factories de Casos de Uso
   const bookUseCases = makeBookUseCases(booksDao, loansDao, events);
 
   // 3. Inyectamos los Casos de Uso en los Controladores
   const booksController = new BooksController(bookUseCases);
 
-  // 4. Inyectamos los Controladores en los Routers
+  // 4. Inyectamos los Controladores (y los middlewares de auth) en los Routers
   const router = Router();
-  router.use("/books", createBooksRouter(booksController));
+  router.use("/books", createBooksRouter(booksController, auth)); // ← CAMBIÓ
 
   // Entidad Users
-  const usersController = new UsersController(makeUserUseCases(usersDao, loansDao, events));
-  router.use("/users", createUsersRouter(usersController));
+  const usersController = new UsersController(makeUserUseCases(usersDao, loansDao, events, hasher)); // ← CAMBIÓ
+  router.use("/users", createUsersRouter(usersController, auth)); // ← CAMBIÓ
 
   // Entidad Loans
   const loansController = new LoansController(makeLoanUseCases({ loansDao, booksDao, usersDao, events }));
-  router.use("/loans", createLoansRouter(loansController));
+  router.use("/loans", createLoansRouter(loansController, auth)); // ← CAMBIÓ
+
+  // ← NUEVO: Auth
+  const authController = new AuthController(makeAuthUseCases({ dao: usersDao, events, hasher, tokens }));
+  router.use("/auth", createAuthRouter(authController, auth));
 
   // Retornamos el router principal listo para ser usado por Express
   return router;

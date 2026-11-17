@@ -4,7 +4,8 @@ import { UserModel } from "../models/index.js";
 // Columnas pedidas explícitamente: sin `attributes` Sequelize hace SELECT * y traería TODAS las columnas
 // (el día que exista `password` saldría en cada respuesta). Todas las lecturas de este DAO la usan.
 const USER_ATTRIBUTES = ["id", "nombre", "email", "rol"];
-
+// Solo para el login: el único lugar donde se lee passwordHash.
+const CREDENTIAL_ATTRIBUTES = [...USER_ATTRIBUTES, "passwordHash"];
 /**
  * Adaptador DAO para Usuarios utilizando Sequelize (SQL).
  * Debe respetar la misma interfaz pública que UsersMemoryDao.
@@ -44,6 +45,11 @@ class UsersSequelizeDao {
     return user ? user.get({ plain: true }) : null;
   }
 
+  async getCredentialsByEmail(email) {
+    const user = await UserModel.findOne({ where: { email }, attributes: CREDENTIAL_ATTRIBUTES });
+    return user ? user.get({ plain: true }) : null;
+  }
+
   async save(data) {
     const { id: _ignored, ...userData } = data;
     const newUser = await UserModel.create(userData);
@@ -52,12 +58,13 @@ class UsersSequelizeDao {
   }
 
   async update(id, changes) {
-    const user = await UserModel.findByPk(id, { attributes: USER_ATTRIBUTES });
+    const user = await UserModel.findByPk(id);
     if (!user) return null;
 
     const { id: _ignored, ...allowedChanges } = changes;
     await user.update(allowedChanges);
-    return user.get({ plain: true });
+    // Se relee con las columnas permitidas: la instancia puede tener passwordHash cargado
+    return this.getById(id);
   }
 
   async delete(id) {

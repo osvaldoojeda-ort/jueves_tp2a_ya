@@ -6,14 +6,15 @@ import deleteUser from "./deleteUser.js";
 
 /**
  * Factory de Casos de Uso para Usuarios.
- * Recibe el DAO de usuarios, el de préstamos (para validar el borrado) y el bus de eventos, e inyecta la dependencia en cada caso de uso.
+ * Recibe el DAO de usuarios, el de préstamos (para validar el borrado), el bus de eventos
+ * y el hasher de contraseñas, e inyecta las dependencias en cada caso de uso.
  */
-function makeUserUseCases(dao, loansDao, events) {
+function makeUserUseCases(dao, loansDao, events, hasher) { // ← CAMBIÓ: recibe hasher
   return {
     getUsers: (filters) => getUsers(filters, dao, loansDao),
     getUserById: (id, options) => getUserById(id, dao, loansDao, options),
-    createUser: (data) => createUser(data, dao, events),
-    updateUser: (id, changes) => updateUser(id, changes, dao),
+    createUser: (data) => createUser(data, dao, events, hasher),           // ← CAMBIÓ
+    updateUser: (id, changes) => updateUser(id, changes, dao, hasher),     // ← CAMBIÓ
     deleteUser: (id) => deleteUser(id, dao, loansDao),
   };
 }

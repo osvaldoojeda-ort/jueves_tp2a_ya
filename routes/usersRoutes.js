@@ -12,9 +12,10 @@ import {
  * Factory de Router para Usuarios.
  * Recibe el controlador ya instanciado y configura los endpoints.
  */
-function createUsersRouter(controller) {
+function createUsersRouter(controller, auth) {
   const router = express.Router();
 
+  router.use(auth.authenticate, auth.authorize("admin"));
   router.get("/", validateQuery(queryUsersSchema), controller.list);
   router.get("/:id", validateParams(userIdParamSchema), validateQuery(queryUserByIdSchema), controller.get);
   router.post("/", validate(createUserSchema), controller.create);

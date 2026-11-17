@@ -5,9 +5,10 @@ import { createLoanSchema, queryLoansSchema, loanIdParamSchema } from "../schema
 /**
  * Factory de Router para Préstamos.
  */
-function createLoansRouter(controller) {
+function createLoansRouter(controller, auth) {
   const router = express.Router();
 
+   router.use(auth.authenticate); // ← 2) solo autenticados (cualquier rol)
   router.get("/", validateQuery(queryLoansSchema), controller.list);
   router.get("/:id", validateParams(loanIdParamSchema), controller.get);
   router.post("/", validate(createLoanSchema), controller.create);

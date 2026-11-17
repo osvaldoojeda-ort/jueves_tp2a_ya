@@ -7,6 +7,11 @@ const fields = {
   nombre: z.string({ error: "El nombre es obligatorio" }).min(2, "El nombre debe tener al menos 2 caracteres"),
   email: z.email({ error: "Debe ser un correo electrónico válido" }),
   rol: z.enum(ROLES, { error: "El rol debe ser 'lector' o 'admin'" }),
+  // NUEVO — bcrypt solo usa los primeros 72 bytes: más que eso se ignora en silencio
+  password: z
+    .string({ error: "La contraseña es obligatoria" })
+    .min(8, "La contraseña debe tener al menos 8 caracteres")
+    .max(72, "La contraseña no puede superar los 72 caracteres"),
 };
 
 // Esquema para POST /users
@@ -14,6 +19,7 @@ const createUserSchema = z.object({
   nombre: fields.nombre,
   email: fields.email,
   rol: fields.rol.default("lector"),
+  password: fields.password, // NUEVO (obligatorio)
 });
 
 // Esquema para PUT /users/:id (actualización parcial)
@@ -21,6 +27,7 @@ const updateUserSchema = z.object({
   nombre: fields.nombre.optional(),
   email: fields.email.optional(),
   rol: fields.rol.optional(),
+  password: fields.password.optional(), // NUEVO (opcional)
 });
 
 // Esquema para req.query en GET /users (filtros, paginación y relación con libros)
