@@ -126,3 +126,65 @@ Content-Type: application/json
 
 ### 22. Eliminar usuario (204)
 DELETE http://localhost:8000/users/2
+
+//------------------------------------------------------------------------------
+### ================= USERS =================
+@usersUrl = http://localhost:8000/users
+
+### U1. Listar usuarios (200)
+GET {{usersUrl}}
+
+### U2. Usuario por id (200)
+GET {{usersUrl}}/1
+
+### U3. Usuario inexistente (404)
+GET {{usersUrl}}/999
+
+### U4. Crear usuario inválido (400) - nombre corto y email mal
+POST {{usersUrl}}
+Content-Type: application/json
+
+{
+  "nombre": "A",
+  "email": "no-es-un-email"
+}
+
+### U5. Crear usuario válido (201) - rol por defecto "lector"
+POST {{usersUrl}}
+Content-Type: application/json
+
+{
+  "nombre": "Ricardo Muller",
+  "email": "ricardo@gmail.com"
+}
+
+### U6. Crear usuario con email duplicado (409)
+POST {{usersUrl}}
+Content-Type: application/json
+
+{
+  "nombre": "Otro Ricardo",
+  "email": "ricardo@mail.com"
+}
+
+### U7. Actualizar parcial (200)
+PUT {{usersUrl}}/1
+Content-Type: application/json
+
+{
+  "rol": "admin"
+}
+
+### U8. Actualizar con rol inválido (400)
+PUT {{usersUrl}}/1
+Content-Type: application/json
+
+{
+  "rol": "superusuario"
+}
+
+### U9. Eliminar usuario (204)
+DELETE {{usersUrl}}/2
+
+### U10. Verificar que se borró (404)
+GET {{usersUrl}}/2
