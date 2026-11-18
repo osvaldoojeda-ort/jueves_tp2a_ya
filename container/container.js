@@ -55,6 +55,8 @@ async function buildContainer() {
   const tokens = createTokenService({ secret: JWT_SECRET, expiresIn: JWT_EXPIRES_IN });
   const auth = createAuthMiddlewares(tokens);
 
+  // Ej. 10.1: hash de una contraseña que nadie usa, con el mismo costo que los reales
+  const dummyHash = await hasher.hash("dummy-password-que-nadie-usa"); // ← NUEVO
   // ← NUEVO: admin inicial, DESPUÉS de inicializar los DAOs y el bus de eventos
   await seedAdmin({ email: ADMIN_EMAIL, password: ADMIN_PASSWORD }, usersDao, events, hasher);
 
@@ -77,7 +79,9 @@ async function buildContainer() {
   router.use("/loans", createLoansRouter(loansController, auth)); // ← CAMBIÓ
 
   // ← NUEVO: Auth
-  const authController = new AuthController(makeAuthUseCases({ dao: usersDao, events, hasher, tokens }));
+  const authController = new AuthController(
+    makeAuthUseCases({ dao: usersDao, events, hasher, tokens, dummyHash }) // ← CAMBIÓ
+  );
   router.use("/auth", createAuthRouter(authController, auth));
 
   // Retornamos el router principal listo para ser usado por Express

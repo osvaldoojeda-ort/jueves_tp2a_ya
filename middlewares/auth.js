@@ -42,4 +42,16 @@ function createAuthMiddlewares(tokens) {
   return { authenticate, authorize };
 }
 
+/*
+ * Ej. 10.4 — Si un admin es eliminado, su token sigue valiendo hasta que vence. ¿Cómo evitarlo?
+ * El JWT es "stateless": authenticate solo verifica la firma y la fecha, no consulta la base.
+ * Opción: que authenticate reciba el usersDao y, después de verificar el token, haga
+ * usersDao.getById(payload.sub). Si el usuario ya no existe -> 401. Y de paso se toma el rol
+ * ACTUAL de la base y no el del token (si al admin lo bajaron a lector, deja de ser admin al instante).
+ * Costo: una consulta a la base en CADA request protegido. Se pierde la gran ventaja del JWT
+ * (validar sin ir a la base), suma latencia y carga a la BD, y authenticate pasa a depender del DAO.
+ * Alternativas más livianas: tokens de vida corta (ej. 15 min) + refresh token, o una "lista negra"
+ * de tokens/usuarios revocados en memoria o en Redis (igual es estado que hay que mantener).
+ */
+
 export default createAuthMiddlewares;

@@ -4,6 +4,7 @@
  * y exporta constantes fuertemente tipadas y con valores por defecto.
  */
 
+
 // NUEVO: lee una variable obligatoria; si falta o está vacía, corta el arranque.
 function required(name) {
   const value = process.env[name];
@@ -26,6 +27,7 @@ const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || "1h";
 const BCRYPT_ROUNDS = Number(process.env.BCRYPT_ROUNDS) || 10;
 const ADMIN_EMAIL = process.env.ADMIN_EMAIL;
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD;
+const LOGIN_RATE_LIMIT_MAX = Number(process.env.LOGIN_RATE_LIMIT_MAX) || 5; // ← NUEVO (Ej. 10.2) intentos fallidos por minuto
 
 /*
  * Ej. 1.5 — ¿Por qué es peligroso que el secreto tenga un valor por defecto "para desarrollo"?

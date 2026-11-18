@@ -5,7 +5,7 @@ const id = (label) =>
 
 // Esquema para POST /loans
 const createLoanSchema = z.object({
-  userId: id("userId"),
+  userId: id("userId").optional(), // ← CAMBIÓ
   bookId: id("bookId"),
 });
 

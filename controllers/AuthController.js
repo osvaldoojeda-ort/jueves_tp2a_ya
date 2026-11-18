@@ -26,6 +26,14 @@ class AuthController {
     const user = await this.#useCases.getProfile(req.user);
     res.json(user);
   };
+
+    // ← NUEVO (Ej. 10.3) PUT /auth/password
+  // 204: salió bien y no hay nada que devolver
+  changePassword = async (req, res) => {
+    await this.#useCases.changePassword(req.user, req.body);
+    res.status(204).end();
+  };
+
 }
 
 export default AuthController;

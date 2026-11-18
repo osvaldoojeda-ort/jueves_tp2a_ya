@@ -481,3 +481,116 @@ Content-Type: application/json
   "email": "admin@biblioteca.com",
   "password": "incorrecta"
 }
+
+
+### ============ CLASE 11: EJ. 8 — PRÉSTAMOS POR DUEÑO ============
+
+### ============ CLASE 11 (opcional avanzado): ENDURECER EL LOGIN (Ej. 10) ============
+### Antes de esta sección ejecutá #64 (registro de Pedro) y #65 (login lector).
+
+### 69. Cambiar mi contraseña (204). Después, el login con la contraseña vieja (#65) da 401
+PUT http://localhost:8000/auth/password
+Authorization: Bearer {{lectorToken}}
+Content-Type: application/json
+
+{
+  "currentPassword": "clave1234",
+  "newPassword": "nuevaClave1234"
+}
+
+### 70. Contraseña actual incorrecta (401 INVALID_CREDENTIALS)
+PUT http://localhost:8000/auth/password
+Authorization: Bearer {{lectorToken}}
+Content-Type: application/json
+
+{
+  "currentPassword": "noEsLaActual",
+  "newPassword": "otraClave1234"
+}
+
+### 71. Nueva contraseña demasiado corta (400 VALIDATION_ERROR)
+PUT http://localhost:8000/auth/password
+Authorization: Bearer {{lectorToken}}
+Content-Type: application/json
+
+{
+  "currentPassword": "nuevaClave1234",
+  "newPassword": "123"
+}
+
+### 72. Sin token (401 TOKEN_MISSING)
+PUT http://localhost:8000/auth/password
+Content-Type: application/json
+
+{
+  "currentPassword": "nuevaClave1234",
+  "newPassword": "otraClave1234"
+}
+
+### 73. Email inexistente: tarda lo mismo que #68 (mirá el tiempo de respuesta abajo a la derecha)
+POST http://localhost:8000/auth/login
+Content-Type: application/json
+
+{
+  "email": "noexiste@biblioteca.com",
+  "password": "cualquiera"
+}
+
+### 74. Límite de intentos: ejecutá esta petición 6 veces seguidas. La 6.ª responde 429 TOO_MANY_ATTEMPTS
+### (#68 y #73 también cuentan como fallidos: si ya los corriste, puede saltar antes)
+POST http://localhost:8000/auth/login
+Content-Type: application/json
+
+{
+  "email": "admin@biblioteca.com",
+  "password": "incorrecta"
+}
+
+### 75. Lector intenta devolver el préstamo del admin -> 403 FORBIDDEN
+PUT http://localhost:8000/loans/1/return
+Authorization: Bearer {{lectorToken}}
+
+### 76. Admin lista todos -> 200, ve los de todos
+GET http://localhost:8000/loans
+Authorization: Bearer {{adminToken}}
+
+### ============ CLASE 11: EJ. 10.3 — CAMBIO DE CONTRASEÑA ============
+
+### 79. Cambiar contraseña con la actual INCORRECTA -> 401 INVALID_CREDENTIALS
+PUT http://localhost:8000/auth/password
+Authorization: Bearer {{lectorToken}}
+Content-Type: application/json
+
+{ "currentPassword": "noEsLaMia", "newPassword": "nuevaClave123" }
+
+### 80. Nueva contraseña muy corta -> 400 (Zod)
+PUT http://localhost:8000/auth/password
+Authorization: Bearer {{lectorToken}}
+Content-Type: application/json
+
+{ "currentPassword": "clave1234", "newPassword": "123" }
+
+### 81. Cambiar contraseña OK -> 204
+PUT http://localhost:8000/auth/password
+Authorization: Bearer {{lectorToken}}
+Content-Type: application/json
+
+{ "currentPassword": "clave1234", "newPassword": "nuevaClave123" }
+
+### 82. Login con la contraseña VIEJA -> 401 INVALID_CREDENTIALS
+POST http://localhost:8000/auth/login
+Content-Type: application/json
+
+{ "email": "pedro@mail.com", "password": "clave1234" }
+
+### 83. Login con la contraseña NUEVA -> 200
+POST http://localhost:8000/auth/login
+Content-Type: application/json
+
+{ "email": "pedro@mail.com", "password": "nuevaClave123" }
+
+### 84. Sin token -> 401 TOKEN_MISSING
+PUT http://localhost:8000/auth/password
+Content-Type: application/json
+
+{ "currentPassword": "clave1234", "newPassword": "nuevaClave123" }
