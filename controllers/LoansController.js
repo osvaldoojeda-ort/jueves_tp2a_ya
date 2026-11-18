@@ -3,6 +3,7 @@ import AppError from "../errors/AppError.js";
 /**
  * Controlador de Préstamos.
  * Recibe los casos de uso por inyección de dependencias; no conoce ningún DAO.
+ * Pasa req.user (lo deja authenticate) como `actor`: las reglas de dueño las decide el caso de uso.
  */
 class LoansController {
   #useCases;
@@ -11,7 +12,7 @@ class LoansController {
     this.#useCases = useCases;
   }
 
-    // GET /loans?userId=&bookId=&activos=
+  // GET /loans?userId=&bookId=&activos=
   list = async (req, res) => {
     res.json(await this.#useCases.getLoans(req.query, req.user)); // ← CAMBIÓ
   };

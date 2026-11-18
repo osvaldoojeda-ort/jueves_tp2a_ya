@@ -1,19 +1,20 @@
 import AppError from "../../errors/AppError.js";
-import { assertOwnerOrAdmin } from "./loanPolicy.js"; // ← NUEVO
 
 /**
  * Caso de Uso: Devolver un libro prestado (repone el stock).
- * Reglas de negocio: el préstamo debe existir y no estar ya devuelto.
- * Autorización: si el préstamo no es del lector, 403.
+ * Reglas de negocio:
+ *  - El préstamo debe existir y no estar ya devuelto.
+ *  - Un lector solo puede devolver sus propios préstamos (Ej. 8.3).
  */
-async function returnLoan(id, actor, dao) { // ← CAMBIÓ
+async function returnLoan(id, actor, dao) { // ← CAMBIÓ: actor
   const loan = await dao.getById(id);
   if (!loan) {
     throw new AppError("LOAN_NOT_FOUND", "No existe un préstamo con ese id", 404);
   }
-
-  assertOwnerOrAdmin(actor, loan.userId); // ← NUEVO: permiso antes que el estado
-
+  // ← NUEVO (Ej. 8.3)
+  if (actor.rol !== "admin" && loan.userId !== actor.id) {
+    throw new AppError("FORBIDDEN", "No podés devolver un préstamo que no es tuyo", 403);
+  }
   if (loan.fechaDevolucion) {
     throw new AppError("ALREADY_RETURNED", "Ese préstamo ya fue devuelto", 409);
   }

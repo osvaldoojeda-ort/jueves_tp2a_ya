@@ -4,6 +4,7 @@ const id = (label) =>
   z.number({ error: `${label} debe ser un número` }).int(`${label} debe ser un entero`).positive(`${label} debe ser positivo`);
 
 // Esquema para POST /loans
+// userId es opcional (Ej. 8.1): si no viene, el préstamo es para el usuario del token
 const createLoanSchema = z.object({
   userId: id("userId").optional(), // ← CAMBIÓ
   bookId: id("bookId"),

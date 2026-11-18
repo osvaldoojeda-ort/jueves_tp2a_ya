@@ -561,51 +561,134 @@ Content-Type: application/json
   "password": "incorrecta"
 }
 
-### 75. Lector intenta devolver el préstamo del admin -> 403 FORBIDDEN
-PUT http://localhost:8000/loans/1/return
-Authorization: Bearer {{lectorToken}}
+### ============ CLASE 11: AUTORIZACIÓN POR DUEÑO EN PRÉSTAMOS (Ej. 8) ============
+### Usa dos lectores nuevos (Ana y Luis) para no depender de las secciones anteriores.
+### Antes ejecutá el #0 (login admin). Corré cada request UNA vez y en orden.
 
-### 76. Admin lista todos -> 200, ve los de todos
+### 75. Admin crea un libro con stock para estas pruebas (201)
+# @name libroEj8
+POST http://localhost:8000/books
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{
+  "titulo": "Rayuela",
+  "autor": "Cortázar",
+  "stock": 5
+}
+
+###
+@libroId = {{libroEj8.response.body.id}}
+
+### 76. Registro de Ana (201)
+POST http://localhost:8000/auth/register
+Content-Type: application/json
+
+{
+  "nombre": "Ana",
+  "email": "ana@mail.com",
+  "password": "clave1234"
+}
+
+### 77. Registro de Luis (201)
+POST http://localhost:8000/auth/register
+Content-Type: application/json
+
+{
+  "nombre": "Luis",
+  "email": "luis@mail.com",
+  "password": "clave1234"
+}
+
+### 78. Login Ana
+# @name loginAna
+POST http://localhost:8000/auth/login
+Content-Type: application/json
+
+{
+  "email": "ana@mail.com",
+  "password": "clave1234"
+}
+
+###
+@anaToken = {{loginAna.response.body.token}}
+@anaId = {{loginAna.response.body.user.id}}
+
+### 79. Login Luis
+# @name loginLuis
+POST http://localhost:8000/auth/login
+Content-Type: application/json
+
+{
+  "email": "luis@mail.com",
+  "password": "clave1234"
+}
+
+###
+@luisToken = {{loginLuis.response.body.token}}
+@luisId = {{loginLuis.response.body.user.id}}
+
+### 80. Ana pide un préstamo SIN userId -> 201 (queda a su nombre)
+# @name prestamoAna
+POST http://localhost:8000/loans
+Authorization: Bearer {{anaToken}}
+Content-Type: application/json
+
+{
+  "bookId": {{libroId}}
+}
+
+###
+@prestamoAnaId = {{prestamoAna.response.body.id}}
+
+### 81. Ana pide un préstamo a nombre de Luis -> 403 FORBIDDEN
+POST http://localhost:8000/loans
+Authorization: Bearer {{anaToken}}
+Content-Type: application/json
+
+{
+  "userId": {{luisId}},
+  "bookId": {{libroId}}
+}
+
+### 82. El admin sí puede prestarle a Luis -> 201
+# @name prestamoLuis
+POST http://localhost:8000/loans
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{
+  "userId": {{luisId}},
+  "bookId": {{libroId}}
+}
+
+###
+@prestamoLuisId = {{prestamoLuis.response.body.id}}
+
+### 83. Ana lista préstamos -> 200, solo los suyos
+GET http://localhost:8000/loans
+Authorization: Bearer {{anaToken}}
+
+### 84. Ana pide los préstamos de Luis -> 403 FORBIDDEN
+GET http://localhost:8000/loans?userId={{luisId}}
+Authorization: Bearer {{anaToken}}
+
+### 85. Ana ve su préstamo -> 200
+GET http://localhost:8000/loans/{{prestamoAnaId}}
+Authorization: Bearer {{anaToken}}
+
+### 86. Ana ve el préstamo de Luis -> 403 FORBIDDEN
+GET http://localhost:8000/loans/{{prestamoLuisId}}
+Authorization: Bearer {{anaToken}}
+
+### 87. Ana intenta devolver el préstamo de Luis -> 403 FORBIDDEN
+PUT http://localhost:8000/loans/{{prestamoLuisId}}/return
+Authorization: Bearer {{anaToken}}
+
+### 88. Luis devuelve su préstamo -> 200
+PUT http://localhost:8000/loans/{{prestamoLuisId}}/return
+Authorization: Bearer {{luisToken}}
+
+### 89. El admin lista todos los préstamos -> 200 (ve los de todos)
 GET http://localhost:8000/loans
 Authorization: Bearer {{adminToken}}
-
-### ============ CLASE 11: EJ. 10.3 — CAMBIO DE CONTRASEÑA ============
-
-### 79. Cambiar contraseña con la actual INCORRECTA -> 401 INVALID_CREDENTIALS
-PUT http://localhost:8000/auth/password
-Authorization: Bearer {{lectorToken}}
-Content-Type: application/json
-
-{ "currentPassword": "noEsLaMia", "newPassword": "nuevaClave123" }
-
-### 80. Nueva contraseña muy corta -> 400 (Zod)
-PUT http://localhost:8000/auth/password
-Authorization: Bearer {{lectorToken}}
-Content-Type: application/json
-
-{ "currentPassword": "clave1234", "newPassword": "123" }
-
-### 81. Cambiar contraseña OK -> 204
-PUT http://localhost:8000/auth/password
-Authorization: Bearer {{lectorToken}}
-Content-Type: application/json
-
-{ "currentPassword": "clave1234", "newPassword": "nuevaClave123" }
-
-### 82. Login con la contraseña VIEJA -> 401 INVALID_CREDENTIALS
-POST http://localhost:8000/auth/login
-Content-Type: application/json
-
-{ "email": "pedro@mail.com", "password": "clave1234" }
-
-### 83. Login con la contraseña NUEVA -> 200
-POST http://localhost:8000/auth/login
-Content-Type: application/json
-
-{ "email": "pedro@mail.com", "password": "nuevaClave123" }
-
-### 84. Sin token -> 401 TOKEN_MISSING
-PUT http://localhost:8000/auth/password
-Content-Type: application/json
-
-{ "currentPassword": "clave1234", "newPassword": "nuevaClave123" }
