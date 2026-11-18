@@ -498,9 +498,24 @@ Content-Type: application/json
   "newPassword": "nuevaClave1234"
 }
 
+//--------------
+### 69b. Login con la contraseña NUEVA (renueva el token después del #69)
+# @name loginLectorNueva
+POST http://localhost:8000/auth/login
+Content-Type: application/json
+
+{
+  "email": "pedro@mail.com",
+  "password": "nuevaClave1234"
+}
+
+###
+@lectorToken2 = {{loginLectorNueva.response.body.token}}
+//-----------------
+
 ### 70. Contraseña actual incorrecta (401 INVALID_CREDENTIALS)
 PUT http://localhost:8000/auth/password
-Authorization: Bearer {{lectorToken}}
+Authorization: Bearer {{lectorToken2}}
 Content-Type: application/json
 
 {
@@ -510,7 +525,7 @@ Content-Type: application/json
 
 ### 71. Nueva contraseña demasiado corta (400 VALIDATION_ERROR)
 PUT http://localhost:8000/auth/password
-Authorization: Bearer {{lectorToken}}
+Authorization: Bearer {{lectorToken2}}
 Content-Type: application/json
 
 {
