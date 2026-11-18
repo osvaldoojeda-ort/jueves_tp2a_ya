@@ -1,0 +1,65 @@
+### =====================================
+### Pruebas de la clase 4 (tienen que seguir dando lo mismo)
+### =====================================
+
+### Listar todos los libros
+GET http://localhost:3000/libros
+
+### Filtrar por autor
+GET http://localhost:3000/libros?autor=martin
+
+### Obtener un libro por id (existente)
+GET http://localhost:3000/libros/1
+
+### Crear un libro nuevo
+POST http://localhost:3000/libros
+Content-Type: application/json
+
+{
+  "titulo": "Refactoring",
+  "autor": "Martin Fowler",
+  "isbn": "978-0-13-475759-9",
+  "stock": 6
+}
+
+### Actualizar un libro existente
+PUT http://localhost:3000/libros/1
+Content-Type: application/json
+
+{
+  "stock": 10
+}
+
+### Eliminar un libro
+DELETE http://localhost:3000/libros/2
+
+### =====================================
+### Pruebas nuevas de la clase 5
+### =====================================
+
+### Paginación: page=1, limit=2 -> debe devolver solo 2 resultados
+GET http://localhost:3000/libros?page=1&limit=2
+
+### Paginación: page=2, limit=2
+GET http://localhost:3000/libros?page=2&limit=2
+
+### Orden descendente por stock
+GET http://localhost:3000/libros?sort=-stock
+
+### Orden ascendente por titulo
+GET http://localhost:3000/libros?sort=titulo
+
+### Ruta inexistente -> 404 estandarizado del notFound
+GET http://localhost:3000/cualquier-cosa
+
+### Error viejo con formato nuevo: libro que no existe
+GET http://localhost:3000/libros/999
+
+### Crear libro sin titulo/autor -> 400 DATOS_INCOMPLETOS
+POST http://localhost:3000/libros
+Content-Type: application/json
+
+{
+  "isbn": "000-0-00-000000-0",
+  "stock": 1
+}
