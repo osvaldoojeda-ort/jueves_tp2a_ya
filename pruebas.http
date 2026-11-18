@@ -1,57 +1,105 @@
-### 1. GET /app/books -> listar todos
+### ===================== CLASE 5 (tienen que seguir andando) =====================
+
+### 1. Listar todos (200)
 GET http://localhost:8000/app/books
 
-### 2. GET /app/books?autor=Orwell -> filtro por autor (clase 4, sigue andando)
-GET http://localhost:8000/app/books?autor=Orwell
+### 2. Filtro por autor (200)
+GET http://localhost:8000/app/books?author=Orwell
 
-### 3. GET /app/books?page=1&limit=2 -> paginado: solo 2 resultados
+### 3. Paginado: solo 2 resultados (200)
 GET http://localhost:8000/app/books?page=1&limit=2
 
-### 4. GET /app/books?sort=-stock -> orden descendente por stock
+### 4. Orden descendente por stock (200)
 GET http://localhost:8000/app/books?sort=-stock
 
-### 5. GET /app/books?sort=titulo -> orden ascendente por título
-GET http://localhost:8000/app/books?sort=titulo
+### 5. Orden ascendente por título (200)
+GET http://localhost:8000/app/books?sort=title
 
-### 6. GET /app/books/1 -> existe (200)
+### 6. Libro existente (200)
 GET http://localhost:8000/app/books/1
 
-### 7. GET /app/books/999 -> no existe: formato de error estandarizado (404)
+### 7. Eliminar (200)
+DELETE http://localhost:8000/app/books/2
+
+### 8. Ruta inexistente -> 404 ROUTE_NOT_FOUND (ahora armado por el errorHandler)
+GET http://localhost:8000/cualquier-cosa
+
+### ===================== CLASE 6: EJERCICIO 6 =====================
+
+### 6.1 Author vacío y sin title -> 400 VALIDATION_ERROR con details de title y author
+POST http://localhost:8000/app/books
+Content-Type: application/json
+
+{
+  "author": ""
+}
+
+### 6.2 Stock negativo -> 400, details sobre stock
+POST http://localhost:8000/app/books
+Content-Type: application/json
+
+{
+  "title": "X",
+  "author": "Y",
+  "stock": -3
+}
+
+### 6.3 Stock de tipo incorrecto -> 400
+POST http://localhost:8000/app/books
+Content-Type: application/json
+
+{
+  "title": "X",
+  "author": "Y",
+  "stock": "cinco"
+}
+
+### 6.4 Válido sin stock -> 201 y stock: 0 (default de Zod)
+POST http://localhost:8000/app/books
+Content-Type: application/json
+
+{
+  "title": "Ficciones",
+  "author": "Jorge Luis Borges"
+}
+
+### 6.5 Libro inexistente -> 404 BOOK_NOT_FOUND (armado por el errorHandler)
 GET http://localhost:8000/app/books/999
 
-### 8. POST /app/books -> crear válido (201)
-POST http://localhost:8000/app/books
-Content-Type: application/json
-
-{
-  "isbn": "9788437604947",
-  "titulo": "Ficciones",
-  "autor": "Jorge Luis Borges",
-  "stock": "4"
-}
-
-### 9. POST /app/books -> sin título: error estandarizado (400)
-POST http://localhost:8000/app/books
-Content-Type: application/json
-
-{
-  "autor": "Autor Anónimo"
-}
-
-### 10. PUT /app/books/1 -> actualizar (200)
+### 6.6 PUT solo con stock -> 200 y el title original intacto
 PUT http://localhost:8000/app/books/1
 Content-Type: application/json
 
 {
-  "titulo": "Cien años de soledad (Edición Especial)",
-  "stock": 10
+  "stock": 5
 }
 
-### 11. DELETE /app/books/2 -> eliminar (200)
-DELETE http://localhost:8000/app/books/2
+### 6.7 Error inesperado -> 500 INTERNAL_ERROR
+### Agregá temporalmente JSON.parse("{"); como primera línea de `get` en el controller,
+### ejecutá esta request, mirá el stack en la consola y después SACÁ esa línea.
+GET http://localhost:8000/app/books/1
 
-### 12. GET /cualquier-cosa -> notFound middleware: 404 estandarizado
-GET http://localhost:8000/cualquier-cosa
+### ===================== DESAFÍOS =====================
 
-### 13. GET /app/books -> estado final
-GET http://localhost:8000/app/books
+### D1. page inválido -> 400 VALIDATION_ERROR (paginationSchema)
+GET http://localhost:8000/app/books?page=0
+
+### D2. ISBN con menos de 13 dígitos -> 400
+POST http://localhost:8000/app/books
+Content-Type: application/json
+
+{
+  "title": "El Aleph",
+  "author": "Jorge Luis Borges",
+  "isbn": "123"
+}
+
+### D3. ISBN repetido (es el de "1984") -> 409 ISBN_DUPLICATE
+POST http://localhost:8000/app/books
+Content-Type: application/json
+
+{
+  "title": "Otro libro",
+  "author": "Alguien",
+  "isbn": "9780393312838"
+}
