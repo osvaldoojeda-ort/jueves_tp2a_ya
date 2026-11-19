@@ -29,6 +29,13 @@ const ADMIN_EMAIL = process.env.ADMIN_EMAIL;
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD;
 const LOGIN_RATE_LIMIT_MAX = Number(process.env.LOGIN_RATE_LIMIT_MAX) || 5; // ← NUEVO (Ej. 10.2) intentos fallidos por minuto
 
+// NUEVO — Consumo de APIs externas (Clase 12)
+const CATALOG_TYPE = process.env.CATALOG_TYPE || "openlibrary"; // "openlibrary" (real) o "fake" (sin red)
+const OPEN_LIBRARY_URL = process.env.OPEN_LIBRARY_URL || "https://openlibrary.org";
+const EXTERNAL_TIMEOUT_MS = Number(process.env.EXTERNAL_TIMEOUT_MS) || 5000; // espera máxima por pedido externo
+const IMPORT_CONCURRENCY = Number(process.env.IMPORT_CONCURRENCY) || 3; // pedidos externos simultáneos al importar
+const FAKE_LATENCY_MS = Number(process.env.FAKE_LATENCY_MS) || 300; // demora simulada por pedido del catálogo fake
+
 /*
  * Ej. 1.5 — ¿Por qué es peligroso que el secreto tenga un valor por defecto "para desarrollo"?
  * Es peligroso porque el valor por defecto queda escrito en el código, a la vista de
@@ -49,5 +56,10 @@ export {
   BCRYPT_ROUNDS,
   ADMIN_EMAIL,
   ADMIN_PASSWORD,
-  LOGIN_RATE_LIMIT_MAX, // ← NUEVO
+  LOGIN_RATE_LIMIT_MAX,
+  CATALOG_TYPE, // ← NUEVO (Clase 12)
+  OPEN_LIBRARY_URL,
+  EXTERNAL_TIMEOUT_MS,
+  IMPORT_CONCURRENCY,
+  FAKE_LATENCY_MS,
 };
