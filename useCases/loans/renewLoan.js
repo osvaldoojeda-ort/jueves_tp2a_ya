@@ -29,6 +29,18 @@ async function renewLoan(id, actor, { loansDao, clock, holidays, loanRules }) {
   if (isOverdue(loan, today)) {
     throw new AppError("LOAN_OVERDUE", "El préstamo está vencido: no se puede renovar, hay que devolverlo", 409);
   }
+
+    const otherLoans = await loansDao.getAll({ userId: loan.userId, activos: true });
+  const overdue = otherLoans.filter((l) => l.id !== loan.id && isOverdue(l, today));
+  if (overdue.length > 0) {
+    throw new AppError(
+      "USER_HAS_OVERDUE_LOANS",
+      "El usuario tiene préstamos vencidos: debe devolverlos antes de renovar",
+      409,
+      overdue.map((l) => ({ loanId: l.id, bookId: l.bookId, fechaVencimiento: l.fechaVencimiento }))
+    );
+  }
+  
   if (loan.renovaciones >= loanRules.maxRenewals) {
     throw new AppError(
       "RENEWAL_LIMIT_REACHED",
