@@ -41,6 +41,12 @@ import makeLoanUseCases from "../../usecases/loans/makeLoanUseCases.js";
  *   test terminaba antes de que la promesa se resolviera, y la aserción fallida aparecía (si aparecía) como un
  *   "unhandled rejection" suelto. Era un falso positivo: por eso siempre `await expect(...).rejects`.
  *
+ *  * 7.2 ¿Qué tiene que ver crear un libro con JWT_SECRET? Nada: createBook importaba LOW_STOCK_THRESHOLD de
+ *   config.js, y config.js corta todo con required("JWT_SECRET") apenas se importa. El test mostró un ACOPLAMIENTO.
+ * 7.6 Definir JWT_SECRET en Vitest o hacer vi.mock("config.js") es peor: tapa el síntoma y deja el acoplamiento.
+ *   El caso de uso seguiría leyendo una variable global y el test dependería de la configuración del entorno.
+ *   Inyectando el umbral, el test pasa el valor que quiere (2, 10...) y prueba bordes sin tocar nada global.
+ *
  * 8.3 ¿Cuánto tardaría la suite con bcrypt real (10 rondas) en loginUser? Cada hash/compare tarda ~50-100 ms:
  *   unos pocos segundos solo para ese archivo, en vez de milisegundos. Con Open Library real en importBooks:
  *   cientos de ms por pedido, dependería de internet, y si la API está caída los tests fallarían sin que nuestro

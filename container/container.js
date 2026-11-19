@@ -69,9 +69,9 @@ async function buildContainer() {
   // Catálogo externo: gateway real (Open Library) o falso, según CATALOG_TYPE
   const catalog = getCatalog();
 
-  const bookUseCases = makeBookUseCases(booksDao, loansDao, events, catalog, {
-    importConcurrency: IMPORT_CONCURRENCY,
-    lowStockThreshold: LOW_STOCK_THRESHOLD, // Clase 14: inyectado (antes createBook/updateBook importaban config.js)
+    const bookUseCases = makeBookUseCases(booksDao, loansDao, events, catalog, {
+    importConcurrency: IMPORT_CONCURRENCY, // ← llega por inyección: el caso de uso no lee config.js
+    lowStockThreshold: LOW_STOCK_THRESHOLD, // ← NUEVO (Clase 14): antes createBook/updateBook importaban config.js
   });
 
   // 3. Inyectamos los Casos de Uso en los Controladores
