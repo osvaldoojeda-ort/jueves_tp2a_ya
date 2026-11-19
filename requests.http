@@ -744,3 +744,40 @@ Authorization: Bearer {{adminToken}}
 
 ### B11. Consultar el catálogo sin token (401)
 GET http://localhost:8000/catalog/lookup?isbns=9780156012195
+
+### B12. Importar libros desde el catálogo (informe: imported / skipped / notFound / failed)
+POST http://localhost:8000/books/import
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{
+  "isbns": ["9780140328721", "9780802130303", "9780156012195", "9789500700122", "9780140328721"],
+  "stock": 3
+}
+
+### B13. Repetir la importación: ya existen, todos quedan en "skipped" (no se consulta la red por ellos)
+POST http://localhost:8000/books/import
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{
+  "isbns": ["9780140328721", "9780802130303"]
+}
+
+### B14. Importar como lector (403 FORBIDDEN) — antes ejecutá #64 y #65
+POST http://localhost:8000/books/import
+Authorization: Bearer {{lectorToken}}
+Content-Type: application/json
+
+{
+  "isbns": ["9780140328721"]
+}
+
+### B15. Importar sin ISBN (400 Zod)
+POST http://localhost:8000/books/import
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{
+  "isbns": []
+}

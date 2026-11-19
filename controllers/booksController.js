@@ -32,6 +32,11 @@ class BooksController {
     res.json(book);
   };
 
+    // ← NUEVO (Clase 12) POST /books/import: alta de libros a partir de sus ISBN
+  import = async (req, res) => {
+    res.json(await this.#useCases.importBooks(req.body));
+  };
+
   // POST /books
   create = async (req, res) => {
     const book = await this.#useCases.createBook(req.body);

@@ -52,6 +52,15 @@ const queryBooksSchema = z.object({
   limit: z.coerce.number().int("El límite debe ser un entero").positive("El límite debe ser mayor a 0").max(100, "El límite máximo es 100").optional(),
 });
 
+// NUEVO (Clase 12) — POST /books/import: hasta 10 ISBN (cada uno puede ser un pedido a la API externa)
+const importBooksSchema = z.object({
+  isbns: z
+    .array(fields.isbn, { error: "isbns debe ser un arreglo de ISBN" })
+    .min(1, "Enviá al menos un ISBN")
+    .max(10, "Se pueden importar hasta 10 ISBN por pedido"),
+  stock: fields.stock.nonnegative("El stock no puede ser negativo").default(3),
+});
+
 // Esquema para req.query en GET /books/:id
 const queryBookByIdSchema = z.object({
   incluir: z.enum(["usuarios"], { error: "incluir solo admite 'usuarios'" }).optional(),
@@ -69,5 +78,6 @@ export {
   paginationSchema,
   queryBooksSchema,
   queryBookByIdSchema,
+  importBooksSchema, // ← NUEVO
   bookIdParamSchema,
 };

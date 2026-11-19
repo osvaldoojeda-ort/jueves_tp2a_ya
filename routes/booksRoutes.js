@@ -6,6 +6,7 @@ import {
   queryBooksSchema,
   queryBookByIdSchema,
   bookIdParamSchema,
+  importBooksSchema, // ← NUEVO
 } from "../schemas/bookSchema.js";
 
 /**
@@ -20,6 +21,7 @@ function createBooksRouter(controller, auth) { // ← NUEVO: auth
   router.get("/", validateQuery(queryBooksSchema), controller.list);
     // ← NUEVO (Clase 12). Solo autenticados: cada pedido gasta una consulta a una API de terceros
   router.get("/:id/details", auth.authenticate, validateParams(bookIdParamSchema), controller.details);
+  router.post("/import", ...onlyAdmin, validate(importBooksSchema), controller.import);
   router.get("/:id", validateParams(bookIdParamSchema), validateQuery(queryBookByIdSchema), controller.get);
 
   // Solo admin
