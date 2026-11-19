@@ -1,11 +1,17 @@
 import { z } from "zod";
 import { activosSchema } from "./loanSchema.js";
+import { hasValidIsbn13Checksum } from "../utils/isbn.js";
 
 // Definición de campos reutilizables
 const fields = {
   titulo: z.string({ error: "El título es obligatorio" }).min(1, "El título no puede estar vacío"),
   autor: z.string({ error: "El autor es obligatorio" }).min(1, "El autor no puede estar vacío"),
-  isbn: z.string().regex(/^\d{13}$/, "El ISBN debe tener exactamente 13 dígitos"),
+  // Dos pasos encadenados (Clase 13): primero la forma (13 dígitos) y recién después la cuenta del dígito de control.
+  // Sigue siendo una validación de FORMA: se decide mirando solo el dato, sin consultar nada.
+  isbn: z
+    .string()
+    .regex(/^\d{13}$/, "El ISBN debe tener exactamente 13 dígitos")
+    .refine(hasValidIsbn13Checksum, "El ISBN tiene un dígito de control inválido"),
   stock: z
     .number({ error: "El stock debe ser un número" })
     .int("El stock debe ser un número entero"),
@@ -52,15 +58,15 @@ const queryBooksSchema = z.object({
   limit: z.coerce.number().int("El límite debe ser un entero").positive("El límite debe ser mayor a 0").max(100, "El límite máximo es 100").optional(),
 });
 
-// NUEVO (Clase 12) — req.query de GET /books/export.csv: los mismos filtros del listado + enriquecer
+// Esquema para req.query en GET /books/export.csv: los mismos filtros del listado + enriquecer con el catálogo externo
 const exportBooksQuerySchema = queryBooksSchema
   .pick({ autor: true, author: true, isbn: true, sort: true, page: true, limit: true })
   .extend({
-    enriquecer: activosSchema.optional(), // "true" / "false" → boolean
+    enriquecer: activosSchema.optional(), // "true" / "false"
     separador: z.enum([",", ";"], { error: "separador debe ser ',' o ';'" }).default(","), // ";" para Excel en español
   });
 
-// NUEVO (Clase 12) — POST /books/import: hasta 10 ISBN (cada uno puede ser un pedido a la API externa)
+// Esquema para POST /books/import (hasta 10 ISBN por pedido: cada uno es un pedido HTTP a la API externa)
 const importBooksSchema = z.object({
   isbns: z
     .array(fields.isbn, { error: "isbns debe ser un arreglo de ISBN" })
@@ -86,7 +92,7 @@ export {
   paginationSchema,
   queryBooksSchema,
   queryBookByIdSchema,
-  importBooksSchema, // ← NUEVO
-  exportBooksQuerySchema, // ← NUEVO
+  exportBooksQuerySchema,
+  importBooksSchema,
   bookIdParamSchema,
 };

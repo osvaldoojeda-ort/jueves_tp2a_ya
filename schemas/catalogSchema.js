@@ -1,6 +1,8 @@
 import { z } from "zod";
 
 // Esquema para req.query en GET /catalog/lookup
+// Acá NO se exige el dígito de control (Clase 13): es una CONSULTA, no un dato que se guarda, y el catálogo fake
+// usa ISBN que empiezan con 000 (inválidos a propósito) para simular fallas. Al crear o importar libros sí se exige.
 // isbns llega como texto separado por comas (?isbns=978...,978...) y se transforma en arreglo
 const lookupQuerySchema = z.object({
   isbns: z

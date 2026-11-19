@@ -1,504 +1,509 @@
-
-# Clase 11 — Seguridad: contraseñas con hash y autenticación con JWT
+# Clase 13 — Reglas de negocio, validaciones cruzadas y repaso de status codes
 
 ## Objetivos de la clase
 
-- Distinguir cuatro cosas que se mezclan todo el tiempo: **encoding**, **hash**, **encriptación** y **firma**.
-- Guardar contraseñas de forma segura con **bcrypt** (hash lento con salt) y entender por qué no sirve SHA-256.
-- Entender qué es un **token JWT**, cómo está armado y qué garantiza (y qué *no*).
-- Construir el flujo completo: **registro → login → token → rutas protegidas**.
-- Separar **autenticación** (¿quién sos?) de **autorización** (¿qué podés hacer?) con dos middlewares.
-- Mantener la arquitectura: el hasheo y los tokens son dependencias **inyectadas** desde el Composition Root, igual que el DAO y el notificador.
+- Distinguir los **tipos de validación** (forma, existencia, permisos, reglas de negocio, integridad) y saber **en qué capa vive cada una** y en qué orden se chequean.
+- Escribir **validaciones cruzadas**: entre campos de un mismo pedido (con `refine` de Zod) y entre entidades distintas (usuario + libro + préstamos).
+- Implementar **reglas de negocio finas** sobre el módulo de préstamos: límite de préstamos activos, fecha de vencimiento en días hábiles, bloqueo por préstamos vencidos y renovación.
+- Entender que algunos estados **se calculan y no se guardan** (un préstamo "vencido"), y por qué el **reloj** tiene que ser una dependencia inyectada.
+- Reconocer las **condiciones de carrera** en las reglas del tipo "contar y después insertar", y cuál es la última línea de defensa.
+- Repasar los **status codes** con criterio: cuándo `400`, `404`, `403`, `409`, `422` y los `5xx`.
 
-*(Conecta con la clase 6: la validación con Zod y el error handler se reutilizan. Con la 8 y la 10: el cableado vive en `container/container.js`. Con la 9: el DAO ya devuelve solo las columnas que le pedimos, y hoy eso se vuelve crítico. Con la 13: las reglas finas de acceso, como "un lector solo ve sus préstamos", son reglas de negocio.)*
-
----
-
-## 1. el problema: la API está abierta
-
-Hasta la clase 10 cualquiera que conozca la URL puede crear, modificar o borrar libros y usuarios. Para cerrar eso hay que resolver dos preguntas distintas:
-
-| Pregunta                       | Nombre         | Cómo se resuelve hoy                                                   |
-| ------------------------------ | -------------- | ----------------------------------------------------------------------- |
-| **¿Quién sos?**        | Autenticación | Email + contraseña en el login, y después un token en cada request    |
-| **¿Qué podés hacer?** | Autorización  | Mirando el `rol` del usuario ya identificado (`lector` o `admin`) |
-
-Fijate el orden: primero se autentica, después se autoriza. Si no sabés quién es, no podés decidir qué le corresponde.
-
-Un detalle de nombres que confunde a todos: un request sin credenciales recibe **401** (`Unauthorized`, que en realidad significa "no autenticado"). Un request con credenciales válidas pero sin permiso recibe **403** (`Forbidden`).
+*(Conecta con la clase 6: Zod y el error handler. Con la 7 y la 8: las reglas de negocio viven en los casos de uso y no en los controllers. Con la 11: la autorización por dueño ("solo lo mío") ya fue una regla de negocio. Con la 12: los feriados llegan con el mismo patrón de gateway y los `502`/`504` que vimos ahí se repasan hoy. Con la 14: todo lo que hoy escribamos como función pura se testea sin infraestructura.)*
 
 ---
 
-## 2. cuatro conceptos que no son lo mismo
+## 1. la situación: la biblioteca funciona, pero todavía no se comporta como una biblioteca
 
-Antes de escribir código hay que tener claro con qué herramienta se resuelve cada cosa.
+Veamos cómo se comporta hoy el módulo de préstamos, y si te parece razonable:
 
-| Concepto                                  | Qué hace                                | ¿Se revierte?             | Para qué sirve                                 |
-| ----------------------------------------- | ---------------------------------------- | -------------------------- | ----------------------------------------------- |
-| **Encoding** (base64, URL-encoding) | Cambia la *representación* de un dato | Sí, cualquiera, sin clave | Transportar datos. **No protege nada**    |
-| **Hash** (bcrypt, argon2, SHA-256)  | Huella de una sola vía                  | No                         | Verificar sin guardar el original: contraseñas |
-| **Encriptación** (AES)             | Oculta un dato con una clave             | Sí, con la clave          | Datos que después necesitás volver a leer     |
-| **Firma** (HMAC, RSA)               | Prueba que nadie modificó el dato       | No oculta nada             | Es lo que usa JWT                               |
+- Un usuario puede pedir **100 libros** a la vez.
+- Un préstamo **no vence nunca**: no hay fecha límite para devolver.
+- Un socio que tiene un libro hace **seis meses** puede seguir pidiendo más.
+- Si alguien quiere quedarse un libro un tiempo más, no puede: solo devolverlo y volver a pedirlo.
 
-### cada concepto, fuera del código
+Todo eso "funciona" en el sentido técnico: no hay errores ni excepciones. Pero ninguna biblioteca real opera así. Lo que falta no es infraestructura, son **reglas de negocio**: las normas propias del dominio que dicen qué está permitido y qué no.
 
-- **Encoding → el braille (o el Morse).** Pasar "hola" a puntitos en relieve no esconde nada: cualquiera que conozca la tabla lo lee, y no hace falta ninguna clave. Solo cambia la *forma* para que el mensaje viaje por otro canal (el tacto, un telégrafo, una URL). Si alguien te dice que "protegió" algo con base64, es como decir que protegió una carta escribiéndola en braille.
-- **Hash → la huella dactilar.** Del dedo sale una huella, pero de la huella no se reconstruye el dedo. Sirve para *comprobar* ("¿esta huella coincide con la que tengo guardada?"), no para recuperar el original.
-- **Encriptación → una caja fuerte.** Guardás algo adentro y solo lo recupera quien tiene la llave. Es reversible a propósito.
-- **Firma → el sello de lacre de una carta.** La carta se puede leer, pero si el sello está roto sabés que alguien la abrió o la cambió. Así funciona un JWT.
+Estas son las que vamos a implementar:
 
-Podés verlo en la terminal:
+| #  | Regla                                                                                       | Si se rompe                                                             |
+| -- | ------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------- |
+| R1 | Un usuario puede tener **como máximo 3 préstamos activos**                          | `409 LOAN_LIMIT_REACHED`                                              |
+| R2 | Todo préstamo **vence a los 10 días hábiles** (sin sábados, domingos ni feriados) | — (se calcula)                                                         |
+| R3 | Un usuario con **algún préstamo vencido** no puede pedir libros nuevos              | `409 USER_HAS_OVERDUE_LOANS`                                          |
+| R4 | Un préstamo se puede **renovar una sola vez**, si no está vencido ni devuelto       | `409 RENEWAL_LIMIT_REACHED` / `LOAN_OVERDUE` / `ALREADY_RETURNED` |
+| R5 | El **ISBN** de un libro debe tener un **dígito de control válido**            | `400` (validación de forma)                                          |
 
-```js
-// concepts.js
-import { createHash, createCipheriv, randomBytes, createHmac } from "node:crypto";
-
-// 1. Encoding: base64 se revierte con una línea, no hay secreto
-const encoded = Buffer.from("hola").toString("base64");
-console.log(encoded, Buffer.from(encoded, "base64").toString()); // aG9sYQ== hola
-
-// 2. Hash: mismo input, mismo output, y no hay forma de volver
-console.log(createHash("sha256").update("hola").digest("hex"));
-
-// 3. Encriptación: con la clave se recupera el original
-const key = randomBytes(32);
-const iv = randomBytes(16);
-const cipher = createCipheriv("aes-256-cbc", key, iv);
-console.log(cipher.update("hola", "utf8", "hex") + cipher.final("hex"));
-
-// 4. Firma (HMAC): el texto queda visible, pero no se puede alterar sin la clave
-console.log(createHmac("sha256", "mi-secreto").update("hola").digest("hex"));
-```
-
-La regla que hay que llevarse: **una contraseña nunca se encripta, se hashea**. Si la encriptaras, alguien con la clave (o que robe la base y la clave juntas) podría leer todas. Con un hash, ni siquiera nosotros podemos saber cuál era la contraseña: solo podemos verificar si la que nos mandan produce el mismo hash.
+Lo interesante es que **ninguna de estas reglas se puede resolver mirando un solo dato**: R1 necesita contar los préstamos del usuario, R3 necesita mirar sus fechas, R4 necesita el estado del préstamo y cuántas veces se renovó. Eso es lo que llamamos validaciones **cruzadas**.
 
 ---
 
-## 3. contraseñas: hash, salt y por qué bcrypt
+## 2. tipos de validación y en qué capa vive cada una
 
-### Por qué no sirve SHA-256 (ni MD5)
+La palabra "validar" mezcla cosas muy distintas. Conviene separarlas:
 
-SHA-256 está diseñado para ser **rápido**: una placa de video calcula miles de millones por segundo. Eso es excelente para verificar archivos y desastroso para contraseñas: si se filtra la base, un atacante prueba diccionarios enteros en minutos.
+| Tipo                                | Pregunta que responde                     | Ejemplo                                               | Dónde vive                    | Código                 |
+| ----------------------------------- | ----------------------------------------- | ----------------------------------------------------- | ------------------------------ | ----------------------- |
+| **Forma**                     | ¿El pedido tiene la estructura correcta? | `stock` es un número, `email` parece un email    | Schema de Zod en el router     | `400`                 |
+| **Autenticación**            | ¿Quién sos?                             | Token presente y firmado                              | Middleware                     | `401`                 |
+| **Autorización**             | ¿Tenés permiso para esta operación?    | Solo el admin crea libros                             | Middleware o caso de uso       | `403`                 |
+| **Existencia**                | ¿Lo que mencionás existe?               | El libro `999`                                      | Caso de uso                    | `404`                 |
+| **Estado / regla de negocio** | ¿La operación tiene sentido *ahora*?  | El libro no tiene stock; el préstamo ya fue devuelto | **Caso de uso**          | `409`                 |
+| **Integridad**                | ¿La base lo tolera?                      | Email único, claves foráneas                        | La base de datos (constraints) | `409` (si se traduce) |
 
-Hay dos defensas, y bcrypt trae las dos:
+Una regla práctica para decidir dónde va cada cosa:
 
-- **Salt**: un valor aleatorio distinto por cada usuario que se mezcla con la contraseña antes de hashear. Dos usuarios con la contraseña `Clave12345` terminan con hashes distintos, y un atacante no puede usar tablas precalculadas.
-- **Costo ajustable (rounds)**: el hash es **lento a propósito**. Con cada `+1` de costo el cálculo tarda el doble. 10 rondas son unos ~70 ms: imperceptible para un login, inviable para probar millones de combinaciones.
+- Si se puede decidir **mirando solo el pedido** (sin consultar nada), es de **forma** y va en Zod.
+- Si hace falta **consultar datos** (la base, otra API, la fecha de hoy), es de **negocio** y va en el **caso de uso**.
+- Si tiene que valer **aunque alguien se saltee la API** (un script, otro servicio), es de **integridad** y además va como constraint en la base.
 
-### Anatomía de un hash bcrypt
+### El orden importa
 
-```
-$2b$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy
- │   │  └──────────── salt (22 caracteres) ──┘└─── hash ────────────┘
- │   └─ costo (10 rondas)
- └─ versión del algoritmo
-```
-
-El salt y el costo viajan **dentro** del propio hash. Por eso `compare` solo necesita la contraseña y el hash guardado: no hay una columna `salt` aparte.
-
-### bcryptjs
-
-```js
-// security/passwordHasher.js
-import bcrypt from "bcryptjs";
-
-function createPasswordHasher({ rounds }) {
-  return {
-    hash: (plain) => bcrypt.hash(plain, rounds),
-    compare: (plain, hash) => bcrypt.compare(plain, hash),
-  };
-}
-
-export default createPasswordHasher;
-```
-
-Tres cosas para remarcar:
-
-- Usamos la versión **asíncrona** (`hash`, no `hashSync`). El hash es CPU pura y la versión síncrona bloquea el event loop: mientras una persona se registra, nadie más recibe respuesta.
-- Elegimos `bcryptjs` (JavaScript puro) y no `bcrypt` (módulo nativo): se instala sin compilar y funciona igual. En producción pesada se prefiere el nativo por velocidad.
-- bcrypt solo procesa los **primeros 72 bytes** de la contraseña. Por eso el esquema Zod pone `max(72)`.
-
-### El hasheador es una dependencia, no un import
-
-Fijate que `createPasswordHasher` no lo importan los casos de uso: se crea en el contenedor y se **inyecta**. Es el mismo patrón del DAO y del notificador:
-
-- El caso de uso depende de un contrato (`hash()` y `compare()`), no de bcryptjs.
-- En la clase 14, al testear, le pasamos un hasheador falso que responde al instante.
-- Si mañana se migra a argon2, cambia un archivo.
-
-### Nunca devolver el hash
-
-Esto conecta con la clase 9. Si el modelo tiene `passwordHash` y el DAO hace `findByPk(id)` sin `attributes`, Sequelize hace `SELECT *` y el hash sale en el JSON. Por eso:
-
-- Todas las lecturas del DAO piden `attributes: USER_ATTRIBUTES`, que **no incluye** `passwordHash`.
-- Hay **un único método** que lo devuelve: `getCredentialsByEmail`, que existe solo para el login.
-
-```js
-// dao/users/UsersSequelizeDao.js
-const USER_ATTRIBUTES = ["id", "nombre", "email", "rol"];
-
-// Credenciales para el login: es el ÚNICO método que devuelve el hash de la contraseña
-async getCredentialsByEmail(email) {
-  const user = await UserModel.findOne({
-    where: { email },
-    attributes: [...USER_ATTRIBUTES, "passwordHash"],
-  });
-  return user ? user.get({ plain: true }) : null;
-}
-```
-
-El DAO en memoria hace lo mismo con un helper privado que quita el campo. Los dos adaptadores respetan el contrato, como siempre.
-
----
-
-## 4. tokens y JWT
-
-### El problema que resuelve
-
-HTTP no tiene memoria: cada request llega "de cero". Si hiciéramos login con email y contraseña **en cada request**, tendríamos que mandar la contraseña todo el tiempo y correr bcrypt (lento) cada vez. Mejor: hacemos login **una vez**, el servidor nos entrega una "credencial temporal" y la mostramos en los pedidos siguientes. Esa credencial es el **token**.
-
-### Qué es un JWT
-
-Un JWT (*JSON Web Token*) son tres partes en base64url separadas por puntos:
-
-```
-eyJhbGciOiJIUzI1NiJ9 . eyJzdWIiOiIyIiwicm9sIjoibGVjdG9yIiwiZXhwIjoxNzYwfQ . 5mJc...
-└──── header ───────┘   └──────────────── payload ─────────────────────┘   └ firma ┘
-```
-
-```js
-// header: algoritmo de firma
-{ "alg": "HS256", "typ": "JWT" }
-
-// payload: los "claims" (afirmaciones)
-{ "sub": "2", "rol": "lector", "iat": 1760000000, "exp": 1760003600 }
-```
-
-| Claim   | Significado                                                     |
-| ------- | --------------------------------------------------------------- |
-| `sub` | *Subject*: de quién es el token (el id del usuario)          |
-| `iat` | *Issued at*: cuándo se emitió                               |
-| `exp` | *Expiration*: cuándo vence                                   |
-| `rol` | Claim propio nuestro, para no consultar la base en cada request |
-
-La **firma** es un HMAC-SHA256 de `header.payload` usando el secreto del servidor. Si alguien cambia una letra del payload (por ejemplo `"rol": "admin"`), la firma deja de coincidir y el servidor rechaza el token.
-
-### Lo que garantiza y lo que NO
-
-| ✅ Garantiza                                         | ❌ No garantiza                                                                               |
-| ---------------------------------------------------- | --------------------------------------------------------------------------------------------- |
-| **Integridad**: el contenido no fue alterado   | **Confidencialidad**: cualquiera puede leer el payload (es base64, ¡pegalo en jwt.io!) |
-| **Autoría**: lo firmó quien tiene el secreto | Que el usuario siga existiendo o conserve el rol                                              |
-| **Vigencia**: se puede vencer (`exp`)        | Poder "des-emitirlo" antes de que venza (no hay logout real)                                  |
-
-De ahí salen tres reglas:
-
-1. **Nada sensible en el payload.** Ni contraseñas, ni datos personales. Solo `sub` y `rol`.
-2. **El secreto es la llave maestra.** Quien lo conozca puede fabricar tokens de admin. Vive en `.env` (nunca en git) y debe ser largo y aleatorio. Por eso `config.js` **tira un error al arrancar** si `JWT_SECRET` no está definido, en lugar de usar un valor por defecto.
-3. **Vida corta.** Como no se puede revocar, mientras menos dure, menos daño hace un token robado. Usamos `1h`.
-
-### Sesión con estado vs. token sin estado
-
-|                              | Sesión (cookie + id en servidor) | JWT                                     |
-| ---------------------------- | --------------------------------- | --------------------------------------- |
-| Dónde está la información | En el servidor (memoria/BD)       | En el propio token                      |
-| Por request                  | El servidor busca la sesión      | El servidor solo verifica la firma      |
-| Escalar a varios servidores  | Hay que compartir las sesiones    | Cualquier servidor con el secreto sirve |
-| Cerrar sesión / revocar     | Se borra la sesión               | Difícil: hay que esperar al `exp`    |
-
-Ninguno es "mejor". JWT encaja bien en APIs consumidas por distintos clientes (web, mobile), y es lo que se pide en el temario.
-
-### Servicio de tokens
-
-Igual que el hasheador, se crea en el contenedor y se inyecta:
-
-```js
-// security/tokenService.js
-import jwt from "jsonwebtoken";
-import AppError from "../errors/AppError.js";
-
-function createTokenService({ secret, expiresIn }) {
-  return {
-    sign: (payload) => jwt.sign(payload, secret, { expiresIn }),
-
-    verify(token) {
-      try {
-        // Fijamos el algoritmo para que nadie pueda cambiarlo desde el header del token
-        return jwt.verify(token, secret, { algorithms: ["HS256"] });
-      } catch (err) {
-        if (err.name === "TokenExpiredError") {
-          throw new AppError("TOKEN_EXPIRED", "El token venció, iniciá sesión de nuevo", 401);
-        }
-        throw new AppError("TOKEN_INVALID", "Token inválido", 401);
-      }
-    },
-  };
-}
-```
-
-Fijar `algorithms` evita el clásico ataque del header `"alg": "none"`: un token sin firma que una librería descuidada aceptaría.
-
----
-
-## 5. ¿dónde guarda el token el front? body vs. cookie
-
-Hay dos formas habituales de entregar el token, y es una decisión de diseño con trade-offs reales:
-
-|                                   | En el body + header `Authorization: Bearer`                  | En una cookie `httpOnly`                                                  |
-| --------------------------------- | -------------------------------------------------------------- | --------------------------------------------------------------------------- |
-| Cómo lo manda el cliente         | A mano, en cada request (`fetch` con el header)              | El navegador la manda sola                                                  |
-| Robo por XSS                      | **Vulnerable** si el front lo guarda en `localStorage` | Protegida: JavaScript no puede leerla                                       |
-| Ataque CSRF                       | No aplica (el navegador no lo manda solo)                      | **Aplica**: hay que mitigarlo (`SameSite`, tokens CSRF)             |
-| Clientes mobile / otros servicios | Natural                                                        | Incómodo                                                                   |
-| Qué necesita el backend          | Nada extra                                                     | `cookie-parser`, `CORS` con credenciales, flags `Secure`/`SameSite` |
-
-En esta clase usamos **body + `Authorization: Bearer`**, porque es lo más simple de probar con un `.http` y lo más portable, y es lo que se espera ver en el final. El token viaja así:
-
-```
-POST /auth/login   →  200 { "token": "eyJ...", "user": { "id": 2, "nombre": "Ana", ... } }
-
-GET /loans         →  Authorization: Bearer eyJ...
-```
-
-Para una web real con un front propio, la cookie `httpOnly` + `SameSite=Strict` suele ser la opción más segura. Conviene que sepan que existe y por qué.
-
----
-
-## 6. el flujo completo
+Los chequeos se hacen del más barato al más caro, y cortando en cuanto uno falla (*fail fast*):
 
 *(si tu editor no renderiza Mermaid, instalá la extensión "Markdown Preview Mermaid Support" en VSCode, o mirá el archivo directamente en GitHub)*
 
 ```mermaid
-sequenceDiagram
-    participant C as Cliente
-    participant A as API (Express)
-    participant H as bcrypt
-    participant D as DAO / BD
-
-    Note over C,D: 1. Login
-    C->>A: POST /auth/login { email, password }
-    A->>D: getCredentialsByEmail(email)
-    D-->>A: { id, rol, passwordHash }
-    A->>H: compare(password, passwordHash)
-    H-->>A: true
-    A->>A: firma el JWT { sub, rol } con el secreto
-    A-->>C: 200 { token, user }
-
-    Note over C,D: 2. Request protegido
-    C->>A: GET /loans  (Authorization: Bearer token)
-    A->>A: authenticate: verifica firma y vencimiento → req.user
-    A->>A: authorize / caso de uso: ¿puede este rol?
-    A->>D: consulta
-    D-->>A: datos
-    A-->>C: 200 datos
+flowchart TD
+    A[Pedido llega] --> B{¿Token válido?}
+    B -- no --> B1[401]
+    B -- sí --> C{¿Tiene el rol?}
+    C -- no --> C1[403]
+    C -- sí --> D{¿Forma válida? Zod}
+    D -- no --> D1[400]
+    D -- sí --> E{¿Existe el usuario y el libro?}
+    E -- no --> E1[404]
+    E -- sí --> F{¿Reglas de estado y de negocio?}
+    F -- no --> F1[409]
+    F -- sí --> G[Ejecutar y guardar]
+    G --> H{¿La base lo tolera?}
+    H -- no --> H1[409 / 500]
+    H -- sí --> I[200 / 201]
 ```
+
+Hacerlo en este orden tiene una razón práctica: no tiene sentido consultar la base para saber si el libro existe si el JSON ni siquiera tiene `bookId`. Y tiene una razón de seguridad: no queremos contarle a alguien sin permiso si un recurso existe o no (lo vemos en la sección 8).
 
 ---
 
-## 7. los casos de uso de autenticación
+## 3. validaciones cruzadas
 
-### Login
+### 3.1. Entre campos del mismo pedido: `refine` de Zod
+
+A veces cada campo es válido por separado pero **la combinación no**. El ejemplo clásico es un rango de fechas: `desde` y `hasta` son fechas válidas, pero `desde` no puede ser posterior a `hasta`.
+
+Imaginá que queremos filtrar el historial de préstamos por fecha: `GET /loans?desde=2026-10-01&hasta=2026-10-31`.
 
 ```js
-// usecases/auth/loginUser.js
-async function loginUser({ email, password }, dao, hasher, tokens) {
-  const credentials = await dao.getCredentialsByEmail(email);
-  const valid = credentials && (await hasher.compare(password, credentials.passwordHash));
-  if (!valid) {
-    throw new AppError("INVALID_CREDENTIALS", "Email o contraseña incorrectos", 401);
+// schemas/loanSchema.js
+const dateOnly = z.iso.date({ error: "La fecha debe tener formato AAAA-MM-DD" });
+
+const queryLoansSchema = z
+  .object({
+    userId: z.coerce.number().int().positive().optional(),
+    desde: dateOnly.optional(),
+    hasta: dateOnly.optional(),
+  })
+  .refine((q) => !q.desde || !q.hasta || q.desde <= q.hasta, {
+    message: "'desde' no puede ser posterior a 'hasta'",
+    path: ["desde"], // en qué campo se informa el error
+  });
+```
+
+Fijate que `refine` recibe el objeto **completo** ya parseado (por eso puede comparar dos campos) y que el `path` hace que el error aparezca en el campo correcto dentro de `details`. Las cadenas `AAAA-MM-DD` se pueden comparar con `<=` directamente porque ordenan igual que las fechas.
+
+Para varios chequeos sobre el mismo objeto, o para mensajes distintos según el caso, existe `superRefine`, que permite agregar varios errores.
+
+### 3.2. Una regla fina de forma: el dígito de control del ISBN
+
+En la clase 12 vimos que el ISBN-13 tiene un último dígito que se calcula a partir de los otros doce. Hoy nuestro esquema solo mira que sean 13 dígitos: un ISBN inventado pasa. Es una validación de **forma** (se decide mirando solo el dato) pero **más fina** que una expresión regular:
+
+```js
+// utils/isbn.js
+// Se multiplican los primeros 12 dígitos alternando por 1 y por 3, se suman,
+// y el dígito de control es lo que falta para llegar a la decena siguiente.
+function hasValidIsbn13Checksum(isbn) {
+  const digits = [...isbn].map(Number);
+  const sum = digits.slice(0, 12).reduce((acc, d, i) => acc + d * (i % 2 === 0 ? 1 : 3), 0);
+  return (10 - (sum % 10)) % 10 === digits[12];
+}
+
+// schemas/bookSchema.js
+isbn: z
+  .string()
+  .regex(/^\d{13}$/, "El ISBN debe tener exactamente 13 dígitos")
+  .refine(hasValidIsbn13Checksum, "El ISBN tiene un dígito de control inválido"),
+```
+
+Dos pasos encadenados: primero la forma (13 dígitos) y recién después la cuenta. Es la misma lógica de un CUIT o de un número de tarjeta: se valida **localmente**, sin llamar a ninguna API, y así se atrapan los errores de tipeo antes de que lleguen a la base.
+
+### 3.3. Entre entidades: es trabajo del caso de uso
+
+Acá `refine` ya no alcanza, porque para decidir hay que **consultar datos**. "El usuario ya tiene 3 préstamos" no se puede saber con el JSON del pedido. Estas reglas viven en el caso de uso:
+
+```js
+// usecases/loans/createLoan.js (esquema simplificado)
+const user = await usersDao.getById(userId);           // existencia → 404
+const book = await booksDao.getById(bookId);           // existencia → 404
+
+const activeLoans = await loansDao.getAll({ userId, activos: true });
+if (activeLoans.length >= maxActiveLoans) {            // regla R1 → 409
+  throw new AppError("LOAN_LIMIT_REACHED", `Un usuario puede tener hasta ${maxActiveLoans} préstamos activos`, 409);
+}
+```
+
+El caso de uso es el único lugar con acceso a **todos** los DAOs a la vez. Por eso las reglas que cruzan entidades ocurren ahí y no en el controller (que solo traduce HTTP) ni en el DAO (que solo persiste).
+
+---
+
+## 4. las reglas finas, una por una
+
+### 4.1. R1 — Límite de préstamos activos
+
+Ya está esbozada arriba. Dos detalles de diseño:
+
+- El tope **no está escrito en el código**: es configuración (`LOAN_MAX_ACTIVE=3`) que llega por inyección. Mañana la biblioteca decide que son 5 y se cambia una variable de entorno, no el código.
+- El mensaje dice **cuál es el límite**: sirve para que quien consume la API (o la persona que mira la pantalla) entienda el motivo sin tener que adivinar.
+
+### 4.2. R2 — Fecha de vencimiento en días hábiles
+
+Cada préstamo guarda ahora su `fechaVencimiento`. Y no son "10 días corridos": son **10 días hábiles**, es decir sin contar sábados, domingos ni feriados.
+
+Esto es una **función pura**: recibe datos y devuelve un resultado, sin leer la base, ni la hora, ni la red. Por eso es fácil de entender y de testear:
+
+```js
+// domain/businessDays.js
+// Fechas como texto "AAAA-MM-DD" (sin hora): evitamos los problemas de zona horaria.
+function addBusinessDays(startDate, days, holidays) {
+  const holidaySet = new Set(holidays);       // búsqueda rápida
+  const date = new Date(`${startDate}T00:00:00Z`);
+  let remaining = days;
+
+  while (remaining > 0) {
+    date.setUTCDate(date.getUTCDate() + 1);   // avanzamos un día
+    const dayOfWeek = date.getUTCDay();        // 0 = domingo, 6 = sábado
+    const iso = date.toISOString().slice(0, 10);
+    if (dayOfWeek !== 0 && dayOfWeek !== 6 && !holidaySet.has(iso)) {
+      remaining--;                             // solo cuenta si es hábil
+    }
   }
+  return date.toISOString().slice(0, 10);
+}
+```
 
-  const token = tokens.sign({ sub: String(credentials.id), rol: credentials.rol });
+Un detalle que parece menor y no lo es: **trabajamos con fechas como texto `AAAA-MM-DD`**, no con objetos `Date` con hora. Si guardáramos un instante y lo comparáramos, "hoy a las 23:30 en Argentina" ya es "mañana" en UTC, y un préstamo podría figurar como vencido unas horas antes de tiempo. Para "días" (no momentos) se usa una fecha sin hora, y se fija **una sola zona horaria** para saber qué día es "hoy".
 
+### 4.3. Los feriados: un segundo gateway
+
+¿De dónde salen los feriados? De una API pública (ArgentinaDatos), con el mismo patrón de la clase 12:
+
+```
+GET https://api.argentinadatos.com/v1/feriados/2026
+→ [{ "fecha": "2026-10-12", "tipo": "trasladable", "nombre": "Día del Respeto a la Diversidad Cultural" }, ...]
+```
+
+Lo que cambia respecto de la clase 12:
+
+|                   | Catálogo de libros (clase 12)                 | Feriados (hoy)                                                      |
+| ----------------- | ---------------------------------------------- | ------------------------------------------------------------------- |
+| ¿Cambia seguido? | Poco, pero hay muchísimos ISBN                | **Casi nunca**: una vez por año                              |
+| Caché            | No conviene (rompe la comparación didáctica) | **Sí conviene**: se pide una vez por año y se guarda        |
+| Si la API falla   | Se muestra lo local                            | Se calcula **sin feriados** (solo fines de semana) y se avisa |
+
+Es otra oportunidad de **degradación elegante**: que una API de terceros esté caída no debería impedir prestar un libro. Pero tampoco hay que esconderlo: el préstamo se crea con un vencimiento que puede estar corrido uno o dos días, y la respuesta lo indica (`holidaysAvailable: false`) para que alguien pueda revisarlo.
+
+El gateway respeta un contrato mínimo, igual que el catálogo, y tiene una versión falsa para clase y para testear:
+
+```js
+// contrato: getHolidays(year) → ["2026-01-01", "2026-02-16", ...]
+```
+
+> **Una decisión de negocio, no técnica:** la API marca algunos días como `puente` (no laborables, pero optativos para el empleador). ¿La biblioteca cierra? Eso lo decide la biblioteca, no el programador. Nosotros los contamos como no hábiles, y lo dejamos documentado, porque el código tiene que reflejar una decisión explícita y no una suposición.
+
+### 4.4. R3 — Un préstamo vencido es un estado *calculado*
+
+¿Cómo sabemos que un préstamo está vencido? La tentación es agregar una columna `estado` con los valores `activo`, `vencido` y `devuelto`. Pero entonces alguien tendría que **actualizarla**: un proceso programado que cada noche revise los préstamos y cambie el estado. Si ese proceso falla un día, la base miente.
+
+La alternativa: **no guardar lo que se puede calcular**.
+
+```js
+// Un préstamo está vencido si NO se devolvió y su fecha límite ya pasó
+const isOverdue = (loan, today) => loan.fechaDevolucion === null && loan.fechaVencimiento < today;
+```
+
+*(si tu editor no renderiza Mermaid, instalá la extensión "Markdown Preview Mermaid Support" en VSCode, o mirá el archivo directamente en GitHub)*
+
+```mermaid
+stateDiagram-v2
+    [*] --> Activo: prestar
+    Activo --> Activo: renovar (una vez)
+    Activo --> Vencido: pasa la fecha de vencimiento
+    Activo --> Devuelto: devolver
+    Vencido --> Devuelto: devolver (con atraso)
+    Devuelto --> [*]
+```
+
+Fijate qué se guarda y qué se calcula:
+
+| Dato                                                                           | ¿Se guarda? | Por qué                                       |
+| ------------------------------------------------------------------------------ | ------------ | ---------------------------------------------- |
+| `fechaPrestamo`, `fechaDevolucion`, `fechaVencimiento`, `renovaciones` | Sí          | Son hechos: pasaron, no cambian solos          |
+| "Está vencido"                                                                | **No** | Depende de qué día es hoy; se deriva         |
+| "Días de atraso"                                                              | **No** | `hoy − fechaVencimiento`, también derivado |
+
+Con esto la regla R3 se escribe sola:
+
+```js
+const overdue = activeLoans.filter((loan) => isOverdue(loan, clock.today()));
+if (overdue.length > 0) {
+  throw new AppError("USER_HAS_OVERDUE_LOANS", "Tenés préstamos vencidos: devolvelos antes de pedir otros", 409);
+}
+```
+
+### 4.5. El reloj es una dependencia
+
+Mirá la línea anterior: `clock.today()`. ¿Por qué no `new Date()` directamente? Porque **la hora es un dato externo**, igual que una base de datos o una API. Una regla que depende de `new Date()` es imposible de probar: para verificar que "un préstamo de hace 3 semanas está vencido" habría que esperar 3 semanas, o hackear el sistema.
+
+La solución es la misma de siempre: **inyectarla**.
+
+```js
+// utils/clock.js
+function createClock({ fixedNow } = {}) {
+  const now = () => (fixedNow ? new Date(fixedNow) : new Date());
   return {
-    token,
-    user: { id: credentials.id, nombre: credentials.nombre, email: credentials.email, rol: credentials.rol },
+    now,
+    // "Hoy" como AAAA-MM-DD, siempre en la zona horaria de la biblioteca
+    today: () => new Intl.DateTimeFormat("en-CA", { timeZone: "America/Argentina/Buenos_Aires" }).format(now()),
   };
 }
 ```
 
-Fijate en el detalle del **mismo error** cuando el email no existe y cuando la contraseña está mal. Si dijéramos "ese email no existe", cualquiera podría usar el login para averiguar qué personas tienen cuenta. Es un principio general: *no des más información de la necesaria a quien todavía no se autenticó*.
+- En producción el reloj devuelve la hora real.
+- En un test (clase 14) se le pasa una fecha fija, y los resultados son siempre los mismos.
+- Para probar a mano con el `.http`, se puede arrancar el servidor con `CLOCK_NOW=2026-12-01T12:00:00Z` y "viajar en el tiempo" para ver cómo se comporta un préstamo vencido.
 
-*(Mejora de nivel avanzado: cuando el email no existe, el servidor responde más rápido porque se saltea bcrypt. Un atacante cronometrando puede distinguir los casos. Se resuelve comparando contra un hash falso de todas formas. Para el curso alcanza con saber que existe.)*
+Un caso de uso que no llama a `new Date()` ni a `fetch` ni a la base, sino que recibe todo por parámetro, es **determinista**: mismas entradas, misma salida. Es la propiedad que más facilita testear.
 
-### Registro
+### 4.6. R4 — Renovar un préstamo
 
-`registerUser` reusa `createUser` (email duplicado, hasheo, evento `user.created`) pero **fuerza `rol: "lector"`**, ignorando lo que mande el cliente. Y el schema `registerSchema` ni siquiera lo acepta:
+`PUT /loans/:id/renew` extiende el plazo. Es el mejor ejemplo de que **una regla de negocio suele ser una cadena de condiciones**, cada una con su propio error:
 
 ```js
-// schemas/authSchema.js
-const registerSchema = createUserSchema.omit({ rol: true });
+// usecases/loans/renewLoan.js (esquema)
+const loan = await loansDao.getById(id);
+if (!loan) throw new AppError("LOAN_NOT_FOUND", "...", 404);                          // existencia
+if (actor.rol !== "admin" && loan.userId !== actor.id) throw new AppError("FORBIDDEN", "...", 403);  // permiso
+if (loan.fechaDevolucion) throw new AppError("ALREADY_RETURNED", "...", 409);        // estado
+if (isOverdue(loan, clock.today())) throw new AppError("LOAN_OVERDUE", "...", 409);  // estado
+if (loan.renovaciones >= maxRenewals) throw new AppError("RENEWAL_LIMIT_REACHED", "...", 409);  // regla
+
+// El nuevo vencimiento se cuenta desde el actual (no desde hoy)
+const holidays = await holidaysFor(loan.fechaVencimiento);
+const newDueDate = addBusinessDays(loan.fechaVencimiento, loanBusinessDays, holidays);
+return loansDao.renew(id, newDueDate);
 ```
 
-Si dejáramos pasar `rol` desde un endpoint público, cualquiera se registraría como admin. Se llama **escalada de privilegios** y es el error de seguridad más común en APIs de principiantes.
+Fijate el **orden**: es el de la sección 2. Existencia, permisos, estado, regla. Y que cada falla tiene un `code` propio: quien consume la API puede mostrar un mensaje distinto para cada situación sin tener que leer el texto del error.
 
-### El administrador inicial (seed)
+---
 
-Si todos los usuarios nuevos son `lector`, ¿quién crea al primer admin? Se siembra al arrancar desde el contenedor, con el email y la contraseña de `.env` (`ADMIN_EMAIL`, `ADMIN_PASSWORD`):
+## 5. concurrencia: la regla que se rompe con dos pedidos a la vez
+
+R1 dice "como máximo 3 préstamos activos". La implementación obvia:
+
+```js
+const active = await loansDao.getAll({ userId, activos: true });   // 1. cuento
+if (active.length >= 3) throw ...;
+await loansDao.lend({ userId, bookId });                           // 2. inserto
+```
+
+Funciona perfecto con **un** pedido por vez. Pero ¿qué pasa si el mismo usuario manda **dos pedidos al mismo tiempo** cuando ya tiene 2 préstamos?
+
+```
+pedido A: cuenta → 2   (ok, falta uno)
+pedido B: cuenta → 2   (ok, falta uno)      ← lee antes de que A inserte
+pedido A: inserta      → 3 préstamos
+pedido B: inserta      → 4 préstamos        ← la regla se rompió
+```
+
+Es una **condición de carrera** (*race condition*): entre "mirar" y "escribir" otro pedido se coló. Node tiene un solo hilo, pero cada `await` es un punto donde otro pedido puede avanzar.
+
+Hay tres defensas, de menor a mayor garantía:
+
+| Defensa                         | Cómo                                            | Alcance                                                          |
+| ------------------------------- | ------------------------------------------------ | ---------------------------------------------------------------- |
+| Chequear en el caso de uso      | Lo que ya hicimos                                | Cubre el 99% de los casos, **no** los pedidos simultáneos |
+| **Constraint en la base** | Un índice único que impida el duplicado        | Garantía real, la hace la base                                  |
+| **Operación atómica**   | Una transacción, o un `UPDATE` con condición | Mira y escribe en un solo paso                                   |
+
+Ya usamos las dos últimas en la clase 10: el stock se descuenta con un `UPDATE ... WHERE stock > 0` (la condición y la escritura son una sola operación), y todo el préstamo ocurre dentro de una transacción. Para el caso de "no pedir dos veces el mismo libro sin devolverlo" (`ALREADY_LOANED`) el chequeo del caso de uso se refuerza con un **índice único parcial** en la base:
+
+```js
+// dao/models/LoanModel.js
+indexes: [
+  // Un usuario no puede tener dos préstamos ACTIVOS del mismo libro
+  { unique: true, fields: ["userId", "bookId"], where: { fechaDevolucion: null } },
+],
+```
+
+> **La idea general:** las reglas de negocio en el caso de uso dan **buenos mensajes de error**; las constraints de la base dan **garantías**. Se necesitan las dos: la primera para que el usuario entienda qué pasó, la segunda para que ningún bug ni pedido simultáneo pueda violar la regla.
+
+> **Una advertencia sobre `sync({ alter: true })`.** Hasta la clase 12 el proyecto sincronizaba las tablas con `alter: true`. En SQLite eso **recrea las tablas** `users` y `books` para adaptarlas al modelo, y como `loans` tiene claves foráneas con `ON DELETE CASCADE`, **los préstamos se borraban en cada reinicio del servidor** (mientras el stock seguía descontado: aparecía un `OUT_OF_STOCK` inexplicable). Además, con un índice único compuesto, `alter` deja las columnas como `UNIQUE` y ya no se puede volver a prestar un libro devuelto. Por eso desde hoy el proyecto usa `sync()` simple, que solo crea lo que falta. La contracara: si cambia el esquema de un modelo, en desarrollo se borra `database.sqlite`; en un sistema real se usan **migraciones**, que quedan fuera del curso. La lección general: **una herramienta que "arregla sola" la base de datos también puede romperla sola.**
+
+Para el tope de 3 préstamos, que no se puede expresar con un índice, la forma robusta es hacer el conteo y el insert **dentro de la misma transacción**. Lo dejamos como ejercicio avanzado.
+
+---
+
+## 6. repaso de status codes
+
+Después de 12 clases ya usamos casi todos. Ahora los ordenamos con criterio. La regla de oro: el código **le dice al cliente de quién es el problema y qué puede hacer**.
+
+### Las familias
+
+| Familia       | Significado                                   | Quién tiene el problema                |
+| ------------- | --------------------------------------------- | --------------------------------------- |
+| **2xx** | Salió bien                                   | —                                      |
+| **4xx** | El **cliente** hizo algo mal            | Quien llama (reintentar igual no sirve) |
+| **5xx** | Falló el **servidor** (o lo de atrás) | Nosotros (reintentar puede servir)      |
+
+### Los de éxito
+
+| Código                  | Cuándo                                          | En nuestra API                                                                                            |
+| ------------------------ | ------------------------------------------------ | --------------------------------------------------------------------------------------------------------- |
+| **200 OK**         | Salió bien y hay cuerpo                         | `GET`, `PUT`                                                                                          |
+| **201 Created**    | Se **creó** un recurso                    | `POST /books`, `POST /loans`. Lo ideal es agregar el header `Location` con la URL del nuevo recurso |
+| **202 Accepted**   | Lo recibí pero lo **proceso después**    | Una importación de 500 libros en segundo plano                                                           |
+| **204 No Content** | Salió bien y **no hay nada que devolver** | `DELETE`, `PUT /auth/password`                                                                        |
+
+### Los de error del cliente: el criterio
+
+| Código                             | Significa                                                      | Usalo cuando                                                    | Ejemplo nuestro                                                  |
+| ----------------------------------- | -------------------------------------------------------------- | --------------------------------------------------------------- | ---------------------------------------------------------------- |
+| **400 Bad Request**           | El pedido está **mal formado**                          | JSON roto, campo faltante o con tipo incorrecto, regla de forma | Zod rechaza el body                                              |
+| **401 Unauthorized**          | **No sabemos quién sos** (falta autenticación)         | Sin token, token inválido o vencido                            | `TOKEN_MISSING`                                                |
+| **403 Forbidden**             | Sé quién sos, pero **no tenés permiso**               | Rol insuficiente o el recurso no es tuyo                        | Un lector crea un libro                                          |
+| **404 Not Found**             | **No existe**                                            | El id no corresponde a nada                                     | `BOOK_NOT_FOUND`                                               |
+| **409 Conflict**              | El pedido es válido pero **choca con el estado actual** | Duplicados, reglas de negocio de estado                         | `ISBN_DUPLICATE`, `LOAN_LIMIT_REACHED`, `ALREADY_RETURNED` |
+| **422 Unprocessable Content** | Bien formado, pero **semánticamente inválido**         | Combinaciones de campos imposibles                              | `desde` posterior a `hasta`                                  |
+| **429 Too Many Requests**     | Demasiados pedidos                                             | Rate limit                                                      | Muchos logins fallidos                                           |
+
+Los tres que más se confunden:
+
+- **400 vs 422.** Los dos significan "tu pedido está mal". Muchas APIs usan `400` para todo, otras reservan `422` para los errores de significado. Ninguna es incorrecta: **lo importante es elegir una convención y mantenerla**. En este proyecto usamos `400` para todo lo que valida Zod, y `409` para lo que depende del estado.
+- **400 vs 409.** `400`: "el pedido está mal, no importa cuándo lo hagas". `409`: "el pedido está bien, pero **ahora** no se puede". Prestar un libro sin stock es un `409`: si mañana hay stock, el *mismo* pedido funcionaría.
+- **401 vs 403.** Se resuelve con una pregunta: *¿sabemos quién sos?* Si no → `401`. Si sí, pero no podés → `403`. (El nombre `Unauthorized` es un error histórico: en realidad significa "no autenticado".)
+
+### Los de error del servidor
+
+| Código                             | Cuándo                                                      | En nuestra API                                                          |
+| ----------------------------------- | ------------------------------------------------------------ | ----------------------------------------------------------------------- |
+| **500 Internal Server Error** | Algo falló **de nuestro lado** y no lo previmos       | Un bug; el `errorHandler` devuelve un mensaje genérico y no detalles |
+| **502 Bad Gateway**           | **Un tercero** respondió mal o no pudimos conectarnos | `EXTERNAL_API_ERROR` (clase 12)                                       |
+| **503 Service Unavailable**   | Estamos **temporalmente** fuera de servicio            | Mantenimiento, sobrecarga                                               |
+| **504 Gateway Timeout**       | **Un tercero** no respondió a tiempo                  | `EXTERNAL_TIMEOUT` (clase 12)                                         |
+
+### Casos que generan debate
+
+**¿404 o 403 cuando el recurso es de otro?** Hoy, si un lector pide `GET /loans/5` y ese préstamo es de otra persona, respondemos `403`. Eso le confirma que el préstamo 5 **existe**. Si queremos no revelar ni eso, se responde `404`: "para vos, ese recurso no existe". Es un *trade-off*: el `403` es más claro para depurar, el `404` es más discreto. Lo importante es saber que es una decisión y tomarla a conciencia.
+
+**¿Qué responder si devuelven dos veces el mismo libro?** Hoy, `409 ALREADY_RETURNED`. Otra postura posible es responder `200` otra vez (que la operación sea *idempotente*: repetirla no cambia el resultado). Cuál conviene depende de si al cliente le sirve saber que ya estaba hecho. Lo que no se debe hacer es responder `500`.
+
+**¿Cuándo `200` y cuándo `201`?** `201` solo cuando se **creó** algo. `PUT /loans/:id/return` modifica un préstamo existente: es `200`. `POST /books/import` (clase 12) no crea "un recurso" sino que ejecuta una operación: `200` con un informe.
+
+**Mensaje, `code` y status: tres cosas distintas.**
+
+```json
+{ "error": { "code": "LOAN_LIMIT_REACHED", "message": "Un usuario puede tener hasta 3 préstamos activos" } }
+```
+
+- El **status** (`409`) lo entiende cualquier cliente HTTP.
+- El **`code`** es un identificador estable para que el código del cliente decida qué hacer (`if (error.code === "LOAN_LIMIT_REACHED") ...`). **No debería cambiar nunca.**
+- El **`message`** es texto para humanos, se puede reescribir o traducir sin romper a nadie. Un cliente que compara mensajes está mal hecho.
+
+Existe un estándar para este formato (RFC 9457, *Problem Details*), parecido al que ya usamos.
+
+---
+
+## 7. cableado
+
+Nada de esto cambia el Composition Root más que lo justo: lo nuevo se **suma** sin tocar lo anterior.
 
 ```js
 // container/container.js
-await seedAdmin({ email: ADMIN_EMAIL, password: ADMIN_PASSWORD }, usersDao, hasher);
+const clock = createClock({ fixedNow: CLOCK_NOW });          // real o fijo (para probar)
+const holidays = getHolidaysGateway();                        // API real o falsa, según HOLIDAYS_TYPE
+
+const loanRules = {
+  maxActive: LOAN_MAX_ACTIVE,                                 // 3
+  businessDays: LOAN_BUSINESS_DAYS,                           // 10
+  maxRenewals: LOAN_MAX_RENEWALS,                             // 1
+};
+
+makeLoanUseCases({ loansDao, booksDao, usersDao, events, clock, holidays, loanRules });
 ```
 
-Si ya existe, no hace nada; si falta `ADMIN_PASSWORD`, avisa por consola y no crea nada. Fijate que el seed va **después** de `init()` de los DAOs, porque en Sequelize la tabla se crea ahí.
+Observá que las **reglas** (los números) son configuración, el **reloj** y los **feriados** son dependencias inyectadas, y la **lógica de calendario** es una función pura. Los casos de uso se pueden leer de arriba a abajo sin ver `process.env`, `new Date()` ni `fetch`.
 
 ---
 
-## 8. middlewares: autenticar y autorizar
+## 8. cómo se prueba una regla de negocio
 
-```js
-// middlewares/auth.js
-function createAuthMiddlewares(tokens) {
-  function authenticate(req, res, next) {
-    const header = req.headers.authorization ?? "";
-    const [scheme, token] = header.split(" ");
+Una regla se prueba con **escenarios**: se arma una situación, se ejecuta una acción, se verifica la respuesta. Para cada regla hay que probar:
 
-    if (scheme !== "Bearer" || !token) {
-      return next(new AppError("TOKEN_MISSING", "Falta el header Authorization: Bearer <token>", 401));
-    }
+1. **El caso feliz**: la regla se cumple y todo sale bien.
+2. **El borde**: justo en el límite (el préstamo número 3 sí, el 4 no). Los bugs viven en los bordes.
+3. **El caso que la viola**: y que el código de error sea el esperado.
+4. **Que el estado no cambió**: tras un rechazo, el stock y los préstamos quedaron igual.
 
-    try {
-      const { sub, rol } = tokens.verify(token);
-      req.user = { id: Number(sub), rol };
-      next();
-    } catch (err) {
-      next(err);
-    }
-  }
+Ejemplo para R1, en el `.http`:
 
-  const authorize = (...roles) => (req, res, next) => {
-    if (!roles.includes(req.user?.rol)) {
-      return next(new AppError("FORBIDDEN", "No tenés permiso para realizar esta acción", 403));
-    }
-    next();
-  };
-
-  return { authenticate, authorize };
-}
+```
+1. Prestar el libro 1 al usuario Ana        → 201
+2. Prestar el libro 2 a Ana                 → 201
+3. Prestar el libro 3 a Ana                 → 201   (tercer préstamo: justo el límite)
+4. Prestar el libro 4 a Ana                 → 409 LOAN_LIMIT_REACHED
+5. Verificar que el stock del libro 4 no cambió
 ```
 
-- `authenticate` **llena** `req.user`. Todo lo que viene después (controllers, casos de uso) confía en que ese dato es verdadero.
-- `authorize("admin")` es una función que **devuelve** un middleware (una factory), para poder parametrizar los roles: `authorize("admin", "editor")`.
-- Los errores van por `next(err)` hacia el `errorHandler` central de la clase 6: el formato de respuesta es el mismo de siempre.
-
-### Cómo se aplican en los routers
-
-Los routers reciben los middlewares por parámetro (igual que reciben el controller), sin importarlos de ningún lado:
-
-```js
-// routes/booksRoutes.js
-function createBooksRouter(controller, { authenticate, authorize }) {
-  const router = express.Router();
-
-  router.get("/", validateQuery(queryBooksSchema), controller.list);            // público
-  router.post("/", authenticate, authorize("admin"), validate(createBookSchema), controller.create);
-  // ...
-}
-```
-
-Fijate el **orden**: primero `authenticate`, después `authorize`, después validación y controller. Es más barato rechazar un request sin permiso que validar su body.
-
-En `usersRoutes.js` se usa `router.use(authenticate, authorize("admin"))` al principio: protege **todas** las rutas de ese router de una sola vez.
-
-### Qué queda protegido
-
-| Recurso                                       | Quién                                                           |
-| --------------------------------------------- | ---------------------------------------------------------------- |
-| `GET /books`, `GET /books/:id`            | Público                                                         |
-| `POST` / `PUT` / `DELETE /books`        | Solo `admin`                                                   |
-| `/users` (todo)                             | Solo `admin`                                                   |
-| `/loans` (todo)                             | Cualquier usuario autenticado, con reglas por dueño (ver abajo) |
-| `POST /auth/register`, `POST /auth/login` | Público                                                         |
-| `GET /auth/me`                              | Cualquier usuario autenticado                                    |
+Las reglas que dependen de la fecha (R3, R4) son más difíciles con el `.http`, porque hay que "esperar" a que algo venza. Ahí aparece el reloj inyectable: se arranca el servidor con `CLOCK_NOW` en una fecha futura y se observa el comportamiento. Y en la clase 14, con tests automáticos, se le pasa directamente una fecha fija a cada escenario.
 
 ---
 
-## 9. autorización por dueño: "solo lo mío"
+## 9. errores comunes
 
-Con roles no alcanza. Un `lector` puede usar `/loans`, pero **solo sobre sus propios préstamos**. Esa regla depende de *quién* es el usuario y de *a quién pertenece* el recurso, así que **vive en el caso de uso**, no en el router:
-
-```js
-// usecases/loans/createLoan.js
-async function createLoan(data, actor, loansDao, booksDao, usersDao, events) {
-  const { bookId } = data;
-  const userId = data.userId ?? actor.id;   // por defecto, el préstamo es para quien lo pide
-  if (actor.rol !== "admin" && userId !== actor.id) {
-    throw new AppError("FORBIDDEN", "Solo podés pedir préstamos a tu nombre", 403);
-  }
-  // ... el resto de las reglas de la clase 10
-}
-```
-
-El controller le pasa `req.user` como `actor`. Así el caso de uso recibe un dato plano (`{ id, rol }`) y **no sabe nada de Express**, lo que lo hace fácil de testear.
-
-Las reglas aplicadas:
-
-- **Pedir un libro**: un lector lo pide siempre para sí. Un admin puede indicar otro `userId`.
-- **Listar préstamos**: el lector solo ve los suyos (el filtro `userId` se fuerza); el admin ve todos.
-- **Ver o devolver un préstamo**: si no es suyo, `403`.
-
-> **Por qué importa:** la causa nº1 de filtraciones en APIs reales no es romper el login, es *"el endpoint no verificaba que el recurso fuera tuyo"* (se llama IDOR). Cambiar `/loans/5` por `/loans/6` no debería mostrarte datos de otra persona.
-
-### Mi perfil
-
-`GET /auth/me` devuelve el usuario del token, sin pasarle ningún id. Y como reusa el caso de uso de la clase 10, `GET /auth/me?incluir=libros&activos=true` devuelve **los libros que tengo prestados**. Así el lector accede a la relación N a N sin necesitar permisos sobre `/users`.
+| Error                                                 | Consecuencia                         | Qué hacemos                           |
+| ----------------------------------------------------- | ------------------------------------ | -------------------------------------- |
+| Poner reglas de negocio en el controller              | No se reusan ni se testean           | En el caso de uso                      |
+| Poner todas las reglas en Zod                         | Zod no puede consultar la base       | Forma en Zod, estado en el caso de uso |
+| Usar `new Date()` dentro de la regla                | No se puede probar                   | Reloj inyectado                        |
+| Guardar un estado que se puede calcular (`vencido`) | Se desactualiza                      | Derivarlo                              |
+| Comparar fechas con horas y zonas horarias            | Vence unas horas antes o después    | Fechas `AAAA-MM-DD` y una zona fija  |
+| Número mágico dentro del código (`if (n >= 3)`)  | Cambiar la regla exige tocar código | Configuración inyectada               |
+| Un solo error genérico para todos los fallos         | El cliente no puede reaccionar       | Un `code` por cada situación        |
+| Responder `200` con `{ "error": ... }`            | El cliente cree que salió bien      | El status code correcto                |
+| Responder `500` ante un error del cliente           | Parece un bug nuestro                | `4xx`                                |
+| Confiar solo en el chequeo del caso de uso            | Se rompe con pedidos simultáneos    | Constraint o transacción además      |
+| Que una API de terceros caída bloquee algo crítico  | Pérdida de disponibilidad           | Degradación elegante                  |
 
 ---
 
-## 10. cableado en el Composition Root
+## 10. lo que NO vimos (y que existe)
 
-```js
-// container/container.js
-const hasher = createPasswordHasher({ rounds: BCRYPT_ROUNDS });
-const tokens = createTokenService({ secret: JWT_SECRET, expiresIn: JWT_EXPIRES_IN });
-const auth = createAuthMiddlewares(tokens);
-
-await seedAdmin({ email: ADMIN_EMAIL, password: ADMIN_PASSWORD }, usersDao, hasher);
-
-const usersController = new UsersController(makeUserUseCases(usersDao, loansDao, events, hasher));
-router.use("/users", createUsersRouter(usersController, auth));
-
-const authController = new AuthController(makeAuthUseCases({ usersDao, loansDao, events, hasher, tokens }));
-router.use("/auth", createAuthRouter(authController, auth));
-```
-
-Nada de esto cambia los casos de uso de libros ni el sistema de eventos de la clase 10: la seguridad se **suma por los costados**.
-
----
-
-## 11. errores comunes (y cómo evitarlos)
-
-| Error                                         | Consecuencia                             | Qué hacemos                          |
-| --------------------------------------------- | ---------------------------------------- | ------------------------------------- |
-| Guardar la contraseña en texto plano         | Una filtración expone todas las cuentas | Solo `passwordHash`                 |
-| Hashear con SHA-256 / MD5                     | Se rompen en minutos con diccionarios    | bcrypt, con salt y costo              |
-| Devolver el usuario completo en el JSON       | El hash sale a la calle                  | `attributes` explícitos en el DAO  |
-| Secreto corto o subido a git                  | Cualquiera fabrica tokens de admin       | `.env` + error al arrancar si falta |
-| Poner datos sensibles en el payload           | Cualquiera los lee                       | Solo `sub` y `rol`                |
-| Token sin vencimiento                         | Un token robado sirve para siempre       | `expiresIn`                         |
-| Aceptar `rol` en el registro público       | Escalada de privilegios                  | `registerSchema` lo omite           |
-| Mensajes distintos para email/contraseña mal | Se pueden enumerar usuarios              | Un solo `INVALID_CREDENTIALS`       |
-| Verificar solo el rol y no el dueño          | IDOR: ver datos ajenos                   | Reglas por dueño en el caso de uso   |
-
----
-
-## 12. lo que NO vimos (y que existe)
-
-- **Refresh tokens**: un token corto (15 min) para operar y otro largo para pedir uno nuevo sin volver a loguearse. Resuelve el compromiso entre "vida corta" y "no molestar al usuario".
-- **Revocación / logout real**: requiere guardar una lista de tokens inválidos (o versionar los tokens), y con eso se pierde parte de lo "sin estado".
-- **Rate limiting** en el login, para frenar fuerza bruta (`express-rate-limit`).
-- **HTTPS**: sin él, el token viaja en claro por la red. Es obligatorio en producción.
-- **Firmas asimétricas (RS256)**: el servidor firma con una clave privada y otros servicios verifican con la pública.
+- **Máquinas de estado formales**: modelar los estados y las transiciones permitidas de forma explícita (en lugar de un `if` por cada caso).
+- **Reservas y lista de espera**: si no hay stock, anotarse para cuando se devuelva. Cruza reglas con eventos (clase 10).
+- **Multas y sanciones**: suspender al socio unos días por devolver tarde, o cobrarle.
+- **Claves de idempotencia** (`Idempotency-Key`): para que un `POST` repetido por un reintento de red no cree dos préstamos.
+- **Bloqueo optimista** (`version`): detectar que dos personas editaron el mismo registro a la vez.
+- **Calendarios por región y por sede**: los feriados varían por provincia, y cada sucursal puede cerrar en días distintos.
+- **Domain events** más ricos: `loan.overdue`, `loan.renewed`, con avisos por mail al socio.
 
 ---
 
 ## Cierre
 
-- **Hash** para contraseñas (bcrypt, lento y con salt), **firma** para tokens, **encoding** para transportar, **encriptación** para lo que hay que volver a leer. No son intercambiables.
-- Un **JWT** es legible pero no alterable: garantiza integridad, no confidencialidad. Payload mínimo, secreto en `.env`, vida corta.
-- **Autenticar** (`authenticate`, 401) y **autorizar** (`authorize`, 403) son dos pasos distintos, y las reglas "solo lo mío" van en el caso de uso.
-- El hasheador y el servicio de tokens son **dependencias inyectadas** desde el contenedor: el dominio no sabe qué librería hay debajo.
-- El DAO **nunca** devuelve el hash, salvo en el único método pensado para el login.
+- Validar no es una sola cosa: **forma** (Zod), **permisos** (middleware), **existencia** y **reglas de negocio** (caso de uso), **integridad** (la base). Cada una en su capa y chequeadas de la más barata a la más cara.
+- Las validaciones **cruzadas** entre campos van en `refine`; las que cruzan **entidades** van en el caso de uso, que es el único con acceso a todos los DAOs.
+- Lo que se puede calcular **no se guarda** (un préstamo vencido), y lo que depende del tiempo necesita un **reloj inyectado**; si no, no se puede probar.
+- Las reglas del tipo "contar y después insertar" tienen **condiciones de carrera**: el caso de uso da buenos mensajes, la base da garantías, y se necesitan las dos.
+- El status code dice **de quién es el problema**: `400`/`422` pedido inválido, `404` no existe, `403` sin permiso, `409` choca con el estado, `502`/`504` falló un tercero. Y el `code` del error es el contrato estable.
 
-La próxima clase (12) sale de la API propia: consumimos una **API externa** con `fetch`, transformamos los datos y generamos un **CSV descargable**. Ahí vamos a necesitar justamente un endpoint protegido para exportar.
+La próxima clase (14) es de **calidad**: escribimos **tests automáticos** de los casos de uso con Jest o Vitest, sin base ni red. Todo lo que hoy diseñamos como función pura (`addBusinessDays`, `isOverdue`, el reloj fijo, los feriados falsos) es exactamente lo que se va a testear.

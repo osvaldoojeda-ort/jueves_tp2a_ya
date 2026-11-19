@@ -1,30 +1,27 @@
-### ===================== CLASE 11: LOGIN (ejecutar PRIMERO) =====================
-### Hacé "Send Request" en el login admin antes de cualquier request protegido.
-### Si un request responde TOKEN_EXPIRED, volvé a ejecutar el login.
+### ============ CLASE 11: AUTENTICACIÓN (JWT + bcrypt) ============
+### Las peticiones de abajo usan REST Client: `# @name` guarda la respuesta y `{{nombre.response.body.campo}}` la reutiliza.
+### Ejecutá primero el login del admin (#A1) para que el resto tenga token. Ver ADMIN_EMAIL / ADMIN_PASSWORD en .env.
 
-### 0. Login admin
+### A1. Login del administrador (devuelve { token, user })
 # @name loginAdmin
 POST http://localhost:8000/auth/login
 Content-Type: application/json
 
 {
   "email": "admin@biblioteca.com",
-  "password": "Admin12345"
+  "password": "Admin1234"
 }
 
 ###
 @adminToken = {{loginAdmin.response.body.token}}
 
-
-### ===================== BOOKS (GET públicos; POST/PUT/DELETE solo admin) =====================
-
-### 1. Obtener todos los libros (semilla inicial)  [público]
+### 1. Obtener todos los libros (semilla inicial)
 GET http://localhost:8000/books
 
-### 2. Obtener un libro por ID (existente)  [público]
+### 2. Obtener un libro por ID (existente)
 GET http://localhost:8000/books/1
 
-### 3. Obtener un libro por ID (inexistente)  [público]
+### 3. Obtener un libro por ID (inexistente)
 GET http://localhost:8000/books/999
 
 ### 4. Crear libro con cuerpo incompleto (error Zod 400)
@@ -96,16 +93,16 @@ Content-Type: application/json
   "stock": -5
 }
 
-### 12. Filtrar libros por autor (?autor=Saint-Exupéry)  [público]
+### 12. Filtrar libros por autor (?autor=Saint-Exupéry)
 GET http://localhost:8000/books?autor=Saint-Exupéry
 
-### 13. Ordenar libros por título descendente (?sort=-titulo)  [público]
+### 13. Ordenar libros por título descendente (?sort=-titulo)
 GET http://localhost:8000/books?sort=-titulo
 
-### 14. Filtrar por ISBN (?isbn=9789500700122)  [público]
+### 14. Filtrar por ISBN (?isbn=9789500700122)
 GET http://localhost:8000/books?isbn=9789500700122
 
-### ===================== USERS (todo solo admin) =====================
+### ===================== USERS =====================
 
 ### 15. Listar usuarios
 GET http://localhost:8000/users
@@ -127,7 +124,7 @@ Content-Type: application/json
 {
   "nombre": "Ana",
   "email": "ana@mail.com",
-  "password": "clave1234"
+  "password": "Clave12345"
 }
 
 ### 19. Email duplicado (409 EMAIL_DUPLICATED)
@@ -138,7 +135,7 @@ Content-Type: application/json
 {
   "nombre": "Ana Bis",
   "email": "ana@mail.com",
-  "password": "clave1234"
+  "password": "Clave12345"
 }
 
 ### 20. Datos inválidos (400 Zod)
@@ -149,6 +146,7 @@ Content-Type: application/json
 {
   "nombre": "A",
   "email": "no-es-email",
+  "password": "Clave12345",
   "rol": "root"
 }
 
@@ -237,7 +235,6 @@ Content-Type: application/json
 
 ### ============ CLASE 10: PRÉSTAMOS (relación N a N usuarios <-> libros) ============
 ### Un préstamo descuenta 1 de stock; devolverlo lo repone. Si el stock queda <= umbral, se emite book.lowStock.
-### Todo /loans requiere estar autenticado. Con el token de admin se puede operar sobre cualquier usuario.
 
 ### 30. Prestar el libro 1 al usuario 1 (201, stock -1)
 POST http://localhost:8000/loans
@@ -358,7 +355,7 @@ Content-Type: application/json
 {
   "nombre": "Lucía",
   "email": "lucia@biblioteca.com",
-  "password": "clave1234"
+  "password": "Clave12345"
 }
 
 ### 48. Email duplicado (409) -> NO emite user.created
@@ -369,27 +366,27 @@ Content-Type: application/json
 {
   "nombre": "Lucía Bis",
   "email": "lucia@biblioteca.com",
-  "password": "clave1234"
+  "password": "Clave12345"
 }
 
 ### ============ CLASE 10: CONSULTAS N a N (libros con sus usuarios / usuarios con sus libros) ============
 ### Los filtros, el orden y la paginación los resuelve la BD (WHERE / ORDER BY / LIMIT), no un findAll + filter en JS.
 ### Preparación: crear un par de usuarios (#18) y prestar el libro 1 a cada uno (#30 y #32); devolver uno (#42) para ver
-### la diferencia entre historial y préstamos activos. El usuario 1 es el admin que crea seedAdmin (memory y sequelize).
+### la diferencia entre historial y préstamos activos. En memoria el usuario 1 es el Admin sembrado; en Sequelize no hay semilla de usuarios.
 
-### 49. Libros con los usuarios que los tienen (historial completo)  [público]
+### 49. Libros con los usuarios que los tienen (historial completo)
 GET http://localhost:8000/books?incluir=usuarios
 
-### 50. Libros con sus usuarios, solo préstamos sin devolver  [público]
+### 50. Libros con sus usuarios, solo préstamos sin devolver
 GET http://localhost:8000/books?incluir=usuarios&activos=true
 
-### 51. Un libro con sus usuarios  [público]
+### 51. Un libro con sus usuarios
 GET http://localhost:8000/books/1?incluir=usuarios&activos=true
 
-### 52. Filtros combinados: autor + orden + paginación + usuarios  [público]
+### 52. Filtros combinados: autor + orden + paginación + usuarios
 GET http://localhost:8000/books?autor=saint&sort=-titulo&page=1&limit=5&incluir=usuarios
 
-### 53. Filtro inválido (400: sort fuera de las columnas permitidas)  [público]
+### 53. Filtro inválido (400: sort fuera de las columnas permitidas)
 GET http://localhost:8000/books?sort=precio
 
 ### 54. Usuarios con los libros que tienen (historial completo)
@@ -416,286 +413,214 @@ Authorization: Bearer {{adminToken}}
 GET http://localhost:8000/users?incluir=autores
 Authorization: Bearer {{adminToken}}
 
+### ============ CLASE 11: REGISTRO, LOGIN Y PERMISOS ============
 
-### ============ CLASE 11: VERIFICACIÓN DE AUTH (Ej. 7) ============
-
-### 60. Libros sin token (público) -> 200
-GET http://localhost:8000/books
-
-### 61. Crear libro sin token -> 401 TOKEN_MISSING
-POST http://localhost:8000/books
-Content-Type: application/json
-
-{ }
-
-### 62. Users sin token -> 401 TOKEN_MISSING
-GET http://localhost:8000/users
-
-### 63. Mi perfil con token -> 200
-GET http://localhost:8000/auth/me
-Authorization: Bearer {{adminToken}}
-
-### 64. Registro público (siempre queda como lector, aunque mande rol)
+### A2. Registrar un usuario (siempre queda con rol "lector", aunque mande "rol": "admin")
 POST http://localhost:8000/auth/register
 Content-Type: application/json
 
 {
-  "nombre": "Pedro",
-  "email": "pedro@mail.com",
-  "password": "clave1234",
+  "nombre": "Carla",
+  "email": "carla@mail.com",
+  "password": "Carla12345",
   "rol": "admin"
 }
 
-### 65. Login lector
-# @name loginLector
+### A3. Registro con contraseña corta (400 Zod)
+POST http://localhost:8000/auth/register
+Content-Type: application/json
+
+{
+  "nombre": "Carla",
+  "email": "carla2@mail.com",
+  "password": "corta"
+}
+
+### A4. Email ya registrado (409 EMAIL_DUPLICATED)
+POST http://localhost:8000/auth/register
+Content-Type: application/json
+
+{
+  "nombre": "Carla Bis",
+  "email": "carla@mail.com",
+  "password": "Carla12345"
+}
+
+### A5. Login de la lectora (guarda su token)
+# @name loginReader
 POST http://localhost:8000/auth/login
 Content-Type: application/json
 
 {
-  "email": "pedro@mail.com",
-  "password": "clave1234"
+  "email": "carla@mail.com",
+  "password": "Carla12345"
 }
 
 ###
-@lectorToken = {{loginLector.response.body.token}}
+@readerToken = {{loginReader.response.body.token}}
 
-### 66. Lector intenta crear libro -> 403 FORBIDDEN
+### A6. Contraseña incorrecta (401 INVALID_CREDENTIALS)
+POST http://localhost:8000/auth/login
+Content-Type: application/json
+
+{
+  "email": "carla@mail.com",
+  "password": "incorrecta"
+}
+
+### A7. Email inexistente (401 INVALID_CREDENTIALS, el MISMO error: no revela qué emails existen)
+POST http://localhost:8000/auth/login
+Content-Type: application/json
+
+{
+  "email": "nadie@mail.com",
+  "password": "Cualquiera123"
+}
+
+### A8. Crear libro SIN token (401 TOKEN_MISSING)
 POST http://localhost:8000/books
-Authorization: Bearer {{lectorToken}}
+Content-Type: application/json
+
+{
+  "titulo": "Sin token",
+  "autor": "Anónimo"
+}
+
+### A9. Token inventado o alterado (401 TOKEN_INVALID)
+POST http://localhost:8000/books
+Authorization: Bearer abc.def.ghi
+Content-Type: application/json
+
+{
+  "titulo": "Token falso",
+  "autor": "Anónimo"
+}
+
+### A10. Crear libro como lectora (403 FORBIDDEN: autenticada pero sin permiso)
+POST http://localhost:8000/books
+Authorization: Bearer {{readerToken}}
 Content-Type: application/json
 
 {
   "titulo": "No debería poder",
-  "autor": "Pedro"
+  "autor": "Lectora"
 }
 
-### 67. Lector intenta listar usuarios -> 403 FORBIDDEN
-GET http://localhost:8000/users
-Authorization: Bearer {{lectorToken}}
-
-### 68. Login con contraseña incorrecta -> 401 INVALID_CREDENTIALS
-POST http://localhost:8000/auth/login
-Content-Type: application/json
-
-{
-  "email": "admin@biblioteca.com",
-  "password": "incorrecta"
-}
-
-
-### ============ CLASE 11: EJ. 8 — PRÉSTAMOS POR DUEÑO ============
-
-### ============ CLASE 11 (opcional avanzado): ENDURECER EL LOGIN (Ej. 10) ============
-### Antes de esta sección ejecutá #64 (registro de Pedro) y #65 (login lector).
-
-### 69. Cambiar mi contraseña (204). Después, el login con la contraseña vieja (#65) da 401
-PUT http://localhost:8000/auth/password
-Authorization: Bearer {{lectorToken}}
-Content-Type: application/json
-
-{
-  "currentPassword": "clave1234",
-  "newPassword": "nuevaClave1234"
-}
-
-//--------------
-### 69b. Login con la contraseña NUEVA (renueva el token después del #69)
-# @name loginLectorNueva
-POST http://localhost:8000/auth/login
-Content-Type: application/json
-
-{
-  "email": "pedro@mail.com",
-  "password": "nuevaClave1234"
-}
-
-###
-@lectorToken2 = {{loginLectorNueva.response.body.token}}
-//-----------------
-
-### 70. Contraseña actual incorrecta (401 INVALID_CREDENTIALS)
-PUT http://localhost:8000/auth/password
-Authorization: Bearer {{lectorToken2}}
-Content-Type: application/json
-
-{
-  "currentPassword": "noEsLaActual",
-  "newPassword": "otraClave1234"
-}
-
-### 71. Nueva contraseña demasiado corta (400 VALIDATION_ERROR)
-PUT http://localhost:8000/auth/password
-Authorization: Bearer {{lectorToken2}}
-Content-Type: application/json
-
-{
-  "currentPassword": "nuevaClave1234",
-  "newPassword": "123"
-}
-
-### 72. Sin token (401 TOKEN_MISSING)
-PUT http://localhost:8000/auth/password
-Content-Type: application/json
-
-{
-  "currentPassword": "nuevaClave1234",
-  "newPassword": "otraClave1234"
-}
-
-### 73. Email inexistente: tarda lo mismo que #68 (mirá el tiempo de respuesta abajo a la derecha)
-POST http://localhost:8000/auth/login
-Content-Type: application/json
-
-{
-  "email": "noexiste@biblioteca.com",
-  "password": "cualquiera"
-}
-
-### 74. Límite de intentos: ejecutá esta petición 6 veces seguidas. La 6.ª responde 429 TOO_MANY_ATTEMPTS
-### (#68 y #73 también cuentan como fallidos: si ya los corriste, puede saltar antes)
-POST http://localhost:8000/auth/login
-Content-Type: application/json
-
-{
-  "email": "admin@biblioteca.com",
-  "password": "incorrecta"
-}
-
-### ============ CLASE 11: AUTORIZACIÓN POR DUEÑO EN PRÉSTAMOS (Ej. 8) ============
-### Usa dos lectores nuevos (Ana y Luis) para no depender de las secciones anteriores.
-### Antes ejecutá el #0 (login admin). Corré cada request UNA vez y en orden.
-
-### 75. Admin crea un libro con stock para estas pruebas (201)
-# @name libroEj8
+### A11. Crear libro como admin (201)
 POST http://localhost:8000/books
 Authorization: Bearer {{adminToken}}
 Content-Type: application/json
 
 {
-  "titulo": "Rayuela",
-  "autor": "Cortázar",
-  "stock": 5
+  "titulo": "Libro protegido",
+  "autor": "Admin",
+  "stock": 10
 }
 
-###
-@libroId = {{libroEj8.response.body.id}}
+### A12. Listar usuarios como lectora (403): la gestión de usuarios es solo del admin
+GET http://localhost:8000/users
+Authorization: Bearer {{readerToken}}
 
-### 76. Registro de Ana (201)
-POST http://localhost:8000/auth/register
+### A13. Listar usuarios como admin (200, sin passwordHash en la respuesta)
+GET http://localhost:8000/users
+Authorization: Bearer {{adminToken}}
+
+### A14. La lectora pide un libro: el préstamo es a su nombre (201, no manda userId)
+POST http://localhost:8000/loans
+Authorization: Bearer {{readerToken}}
 Content-Type: application/json
 
 {
-  "nombre": "Ana",
-  "email": "ana@mail.com",
-  "password": "clave1234"
+  "bookId": 2
 }
 
-### 77. Registro de Luis (201)
-POST http://localhost:8000/auth/register
+### A15. La lectora intenta pedir un libro a nombre de otro (403)
+POST http://localhost:8000/loans
+Authorization: Bearer {{readerToken}}
 Content-Type: application/json
 
 {
-  "nombre": "Luis",
-  "email": "luis@mail.com",
-  "password": "clave1234"
+  "bookId": 2,
+  "userId": 1
 }
 
-### 78. Login Ana
-# @name loginAna
+### A16. La lectora lista préstamos: solo ve los suyos
+GET http://localhost:8000/loans
+Authorization: Bearer {{readerToken}}
+
+### A17. Mi perfil
+GET http://localhost:8000/auth/me
+Authorization: Bearer {{readerToken}}
+
+### A18. Mi perfil con los libros que tengo prestados (relación N a N)
+GET http://localhost:8000/auth/me?incluir=libros&activos=true
+Authorization: Bearer {{readerToken}}
+
+### A19. Perfil sin token (401)
+GET http://localhost:8000/auth/me
+
+### A20. Los GET de libros siguen siendo públicos
+GET http://localhost:8000/books?incluir=usuarios&activos=true
+
+### ============ CLASE 11 (opcional): CAMBIO DE CONTRASEÑA Y LÍMITE DE INTENTOS ============
+
+### A21. Cambiar mi contraseña (204). Después de ejecutarlo, el login con la contraseña vieja falla
+PUT http://localhost:8000/auth/password
+Authorization: Bearer {{readerToken}}
+Content-Type: application/json
+
+{
+  "currentPassword": "Carla12345",
+  "newPassword": "CarlaNueva456"
+}
+
+### A22. Contraseña actual incorrecta (401 INVALID_CREDENTIALS)
+PUT http://localhost:8000/auth/password
+Authorization: Bearer {{readerToken}}
+Content-Type: application/json
+
+{
+  "currentPassword": "no-es-esta",
+  "newPassword": "OtraNueva789"
+}
+
+### A23. Nueva contraseña demasiado corta (400 Zod)
+PUT http://localhost:8000/auth/password
+Authorization: Bearer {{readerToken}}
+Content-Type: application/json
+
+{
+  "currentPassword": "CarlaNueva456",
+  "newPassword": "corta"
+}
+
+### A24. Sin token (401)
+PUT http://localhost:8000/auth/password
+Content-Type: application/json
+
+{
+  "currentPassword": "x",
+  "newPassword": "CarlaNueva456"
+}
+
+### A25. Límite de intentos: ejecutá esta petición 6 veces seguidas. Al sexto intento fallido responde 429 TOO_MANY_ATTEMPTS
+### (después de un minuto se libera; los logins exitosos no cuentan)
 POST http://localhost:8000/auth/login
 Content-Type: application/json
 
 {
-  "email": "ana@mail.com",
-  "password": "clave1234"
+  "email": "carla@mail.com",
+  "password": "incorrecta"
 }
 
-###
-@anaToken = {{loginAna.response.body.token}}
-@anaId = {{loginAna.response.body.user.id}}
-
-### 79. Login Luis
-# @name loginLuis
-POST http://localhost:8000/auth/login
-Content-Type: application/json
-
-{
-  "email": "luis@mail.com",
-  "password": "clave1234"
-}
-
-###
-@luisToken = {{loginLuis.response.body.token}}
-@luisId = {{loginLuis.response.body.user.id}}
-
-### 80. Ana pide un préstamo SIN userId -> 201 (queda a su nombre)
-# @name prestamoAna
-POST http://localhost:8000/loans
-Authorization: Bearer {{anaToken}}
-Content-Type: application/json
-
-{
-  "bookId": {{libroId}}
-}
-
-###
-@prestamoAnaId = {{prestamoAna.response.body.id}}
-
-### 81. Ana pide un préstamo a nombre de Luis -> 403 FORBIDDEN
-POST http://localhost:8000/loans
-Authorization: Bearer {{anaToken}}
-Content-Type: application/json
-
-{
-  "userId": {{luisId}},
-  "bookId": {{libroId}}
-}
-
-### 82. El admin sí puede prestarle a Luis -> 201
-# @name prestamoLuis
-POST http://localhost:8000/loans
-Authorization: Bearer {{adminToken}}
-Content-Type: application/json
-
-{
-  "userId": {{luisId}},
-  "bookId": {{libroId}}
-}
-
-###
-@prestamoLuisId = {{prestamoLuis.response.body.id}}
-
-### 83. Ana lista préstamos -> 200, solo los suyos
-GET http://localhost:8000/loans
-Authorization: Bearer {{anaToken}}
-
-### 84. Ana pide los préstamos de Luis -> 403 FORBIDDEN
-GET http://localhost:8000/loans?userId={{luisId}}
-Authorization: Bearer {{anaToken}}
-
-### 85. Ana ve su préstamo -> 200
-GET http://localhost:8000/loans/{{prestamoAnaId}}
-Authorization: Bearer {{anaToken}}
-
-### 86. Ana ve el préstamo de Luis -> 403 FORBIDDEN
-GET http://localhost:8000/loans/{{prestamoLuisId}}
-Authorization: Bearer {{anaToken}}
-
-### 87. Ana intenta devolver el préstamo de Luis -> 403 FORBIDDEN
-PUT http://localhost:8000/loans/{{prestamoLuisId}}/return
-Authorization: Bearer {{anaToken}}
-
-### 88. Luis devuelve su préstamo -> 200
-PUT http://localhost:8000/loans/{{prestamoLuisId}}/return
-Authorization: Bearer {{luisToken}}
-
-### 89. El admin lista todos los préstamos -> 200 (ve los de todos)
-GET http://localhost:8000/loans
-Authorization: Bearer {{adminToken}}
 
 ### ============ CLASE 12: CATÁLOGO EXTERNO (Open Library) Y CSV ============
+### Requiere haber ejecutado el login del admin (#A1) al inicio del archivo.
+### Para probar sin internet: CATALOG_TYPE=fake. En el catálogo fake, un ISBN que empieza con 000 simula un error 500.
+### ISBN de prueba: 9780156012195 (El principito), 9780060883287 (Cien años de soledad), 9780140328721 (Fantastic Mr. Fox),
+### 9780802130303 (Ficciones). El 9789500700122 no existe en Open Library (sirve para probar "no encontrado").
 
-### B1. Detalle de un libro con ISBN (200, externalStatus: "ok")
+### B1. Detalle de un libro con ISBN: libro local + datos del catálogo (200, externalStatus: "ok")
 GET http://localhost:8000/books/1/details
 Authorization: Bearer {{adminToken}}
 
@@ -703,10 +628,10 @@ Authorization: Bearer {{adminToken}}
 GET http://localhost:8000/books/999/details
 Authorization: Bearer {{adminToken}}
 
-### B3. Detalle sin token (401 TOKEN_MISSING)
+### B3. Detalle sin token (401 TOKEN_MISSING): cada pedido gasta un pedido a un tercero
 GET http://localhost:8000/books/1/details
 
-### B4. Crear un libro SIN ISBN
+### B4. Crear un libro SIN ISBN (guarda su id para el siguiente pedido)
 # @name bookWithoutIsbn
 POST http://localhost:8000/books
 Authorization: Bearer {{adminToken}}
@@ -764,16 +689,16 @@ Content-Type: application/json
   "isbns": ["9780140328721", "9780802130303"]
 }
 
-### B14. Importar como lector (403 FORBIDDEN) — antes ejecutá #64 y #65
+### B14. Importar como lectora (403 FORBIDDEN)
 POST http://localhost:8000/books/import
-Authorization: Bearer {{lectorToken}}
+Authorization: Bearer {{readerToken}}
 Content-Type: application/json
 
 {
   "isbns": ["9780140328721"]
 }
 
-### B15. Importar sin ISBN (400 Zod)
+### B15. Importar sin ISBN o con más de 10 (400 Zod)
 POST http://localhost:8000/books/import
 Authorization: Bearer {{adminToken}}
 Content-Type: application/json
@@ -782,7 +707,7 @@ Content-Type: application/json
   "isbns": []
 }
 
-### B16. Exportar los libros a CSV (se descarga)
+### B16. Exportar los libros a CSV (se descarga; probá también pegando la URL en el navegador)
 GET http://localhost:8000/books/export.csv
 Authorization: Bearer {{adminToken}}
 
@@ -790,21 +715,212 @@ Authorization: Bearer {{adminToken}}
 GET http://localhost:8000/books/export.csv?autor=a&sort=-titulo
 Authorization: Bearer {{adminToken}}
 
-### B18. Exportar enriquecido (editorial, páginas, fecha) con UN solo pedido en lote (mirá el header X-Enrichment)
+### B18. Exportar enriquecido con datos del catálogo (editorial, páginas, fecha de publicación) en UN solo pedido en lote
 GET http://localhost:8000/books/export.csv?enriquecer=true
 Authorization: Bearer {{adminToken}}
 
-### B19. Exportar como lector (403)
+### B19. Exportar como lectora (403)
 GET http://localhost:8000/books/export.csv
-Authorization: Bearer {{lectorToken}}
+Authorization: Bearer {{readerToken}}
 
 ### B20. Exportar sin token (401)
 GET http://localhost:8000/books/export.csv
 
-### B21. (Opcional) Separador ";" para que Excel en español lo abra en columnas
+### B21. (Opcional) Exportar con separador ";" para que Excel en español lo abra en columnas
 GET http://localhost:8000/books/export.csv?enriquecer=true&separador=;
 Authorization: Bearer {{adminToken}}
 
 ### B22. (Opcional) Separador inválido (400 Zod)
 GET http://localhost:8000/books/export.csv?separador=x
-Authorization: Bearer {{adminToken}}  
+Authorization: Bearer {{adminToken}}
+
+### B23. (Opcional) Caché: arrancá con CATALOG_CACHE_TTL_MS=600000, ejecutá este pedido dos veces seguidas y compará el tiempo (la segunda sale de la caché)
+GET http://localhost:8000/books/2/details
+Authorization: Bearer {{adminToken}}
+
+### ============ CLASE 13: REGLAS DE NEGOCIO, VALIDACIONES CRUZADAS Y STATUS CODES ============
+### Requiere el login del admin (#A1) y el de la lectora Carla (#A5).
+### Esta sección crea su propia socia (Sofía) y sus propios libros, así no depende de lo que hiciste antes.
+### Reglas: R1 máx. 3 préstamos activos · R2 vencimiento a 10 días hábiles · R3 con vencidos no se pide más ·
+###         R4 una sola renovación · R5 ISBN con dígito de control válido.
+### Los pasos C20+ piden REINICIAR el servidor: usá PERSISTENCE_TYPE=sequelize (en memoria se pierde todo).
+### Si tenés un database.sqlite de una clase anterior, borralo antes de arrancar (el modelo de préstamos cambió).
+
+### C1. Registrar a la socia Sofía
+POST http://localhost:8000/auth/register
+Content-Type: application/json
+
+{
+  "nombre": "Sofía",
+  "email": "sofia@mail.com",
+  "password": "Sofia12345"
+}
+
+### C2. Login de Sofía (guarda su token)
+# @name loginSofia
+POST http://localhost:8000/auth/login
+Content-Type: application/json
+
+{
+  "email": "sofia@mail.com",
+  "password": "Sofia12345"
+}
+
+###
+@sofiaToken = {{loginSofia.response.body.token}}
+
+### C3. R5: ISBN con 13 dígitos pero dígito de control inválido (400 VALIDATION_ERROR, regla de FORMA)
+POST http://localhost:8000/books
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{
+  "titulo": "El principito (ISBN mal tipeado)",
+  "autor": "Saint-Exupéry",
+  "isbn": "9780156012196"
+}
+
+### C4. R5: ISBN válido (201). Guarda el libro como "libroA"
+# @name libroA
+POST http://localhost:8000/books
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{
+  "titulo": "Rayuela",
+  "autor": "Julio Cortázar",
+  "isbn": "9789875660014",
+  "stock": 2
+}
+
+### C5. Libro B
+# @name libroB
+POST http://localhost:8000/books
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{ "titulo": "El Aleph", "autor": "Jorge Luis Borges", "stock": 2 }
+
+### C6. Libro C
+# @name libroC
+POST http://localhost:8000/books
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{ "titulo": "Bestiario", "autor": "Julio Cortázar", "stock": 2 }
+
+### C7. Libro D
+# @name libroD
+POST http://localhost:8000/books
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{ "titulo": "Sobre héroes y tumbas", "autor": "Ernesto Sabato", "stock": 5 }
+
+### C8. R1 + R2: Sofía pide el libro A (201). Mirá fechaVencimiento (10 días HÁBILES), estado, holidaysAvailable
+### y el header Location
+# @name prestamoA
+POST http://localhost:8000/loans
+Authorization: Bearer {{sofiaToken}}
+Content-Type: application/json
+
+{ "bookId": {{libroA.response.body.id}} }
+
+### C9. Sofía pide el libro B (201, segundo préstamo)
+# @name prestamoB
+POST http://localhost:8000/loans
+Authorization: Bearer {{sofiaToken}}
+Content-Type: application/json
+
+{ "bookId": {{libroB.response.body.id}} }
+
+### C10. R1 borde: Sofía pide el libro C (201, tercer préstamo: justo el límite)
+# @name prestamoC
+POST http://localhost:8000/loans
+Authorization: Bearer {{sofiaToken}}
+Content-Type: application/json
+
+{ "bookId": {{libroC.response.body.id}} }
+
+### C11. R1 violada: Sofía pide el libro D (409 LOAN_LIMIT_REACHED)
+POST http://localhost:8000/loans
+Authorization: Bearer {{sofiaToken}}
+Content-Type: application/json
+
+{ "bookId": {{libroD.response.body.id}} }
+
+### C12. Tras el rechazo, el estado NO cambió: el libro D sigue con stock 5
+GET http://localhost:8000/books/{{libroD.response.body.id}}
+
+### C13. R4: renovar el préstamo A (200). renovaciones: 1 y el vencimiento se corre 10 días hábiles desde el ANTERIOR
+PUT http://localhost:8000/loans/{{prestamoA.response.body.id}}/renew
+Authorization: Bearer {{sofiaToken}}
+
+### C14. R4: renovarlo otra vez (409 RENEWAL_LIMIT_REACHED)
+PUT http://localhost:8000/loans/{{prestamoA.response.body.id}}/renew
+Authorization: Bearer {{sofiaToken}}
+
+### C15. Renovar un préstamo ajeno (403 FORBIDDEN): Carla intenta renovar el de Sofía
+PUT http://localhost:8000/loans/{{prestamoB.response.body.id}}/renew
+Authorization: Bearer {{readerToken}}
+
+### C16. Renovar un préstamo inexistente (404 LOAN_NOT_FOUND): la existencia se chequea ANTES que el permiso
+PUT http://localhost:8000/loans/999999/renew
+Authorization: Bearer {{sofiaToken}}
+
+### C17. Devolver el préstamo B (200, estado: "devuelto", atrasoAlDevolver: 0)
+PUT http://localhost:8000/loans/{{prestamoB.response.body.id}}/return
+Authorization: Bearer {{sofiaToken}}
+
+### C18. Renovar un préstamo ya devuelto (409 ALREADY_RETURNED)
+PUT http://localhost:8000/loans/{{prestamoB.response.body.id}}/renew
+Authorization: Bearer {{sofiaToken}}
+
+### C19. Volver a pedir el libro B ya devuelto (201): el índice único es PARCIAL, solo mira los préstamos activos
+POST http://localhost:8000/loans
+Authorization: Bearer {{sofiaToken}}
+Content-Type: application/json
+
+{ "bookId": {{libroB.response.body.id}} }
+
+### C20. Validación cruzada con refine: 'desde' posterior a 'hasta' (400, el error aparece en el campo "desde")
+GET http://localhost:8000/loans?desde=2026-12-01&hasta=2026-11-01
+Authorization: Bearer {{adminToken}}
+
+### C21. Fecha con formato inválido (400)
+GET http://localhost:8000/loans?desde=01/11/2026
+Authorization: Bearer {{adminToken}}
+
+### C22. Rango válido: préstamos hechos en noviembre de 2026 (200; cada uno trae estado y diasAtraso calculados)
+GET http://localhost:8000/loans?desde=2026-11-01&hasta=2026-11-30
+Authorization: Bearer {{adminToken}}
+
+### C23. Degradación elegante: REINICIÁ el servidor con HOLIDAYS_TYPE=fake-down (o con HOLIDAYS_URL=http://localhost:9922)
+### y prestá un libro a Carla. Responde 201 con holidaysAvailable: false (vencimiento calculado solo con fines de semana)
+POST http://localhost:8000/loans
+Authorization: Bearer {{readerToken}}
+Content-Type: application/json
+
+{ "bookId": {{libroD.response.body.id}} }
+
+### ---- Viaje en el tiempo: REINICIÁ el servidor con CLOCK_NOW en una fecha posterior a los vencimientos ----
+### (ej. CLOCK_NOW=2027-01-15T12:00:00Z npm start). Los tokens siguen valiendo: su vencimiento usa la hora real.
+
+### C24. R3 calculado: los préstamos de Sofía aparecen con estado "vencido" y diasAtraso > 0 (nada se actualizó en la base)
+GET http://localhost:8000/loans?activos=true
+Authorization: Bearer {{sofiaToken}}
+
+### C25. R3: con préstamos vencidos no se pide otro libro (409 USER_HAS_OVERDUE_LOANS, con el detalle de cuáles)
+POST http://localhost:8000/loans
+Authorization: Bearer {{sofiaToken}}
+Content-Type: application/json
+
+{ "bookId": {{libroD.response.body.id}} }
+
+### C26. R4: un préstamo vencido no se renueva (409 LOAN_OVERDUE)
+PUT http://localhost:8000/loans/{{prestamoC.response.body.id}}/renew
+Authorization: Bearer {{sofiaToken}}
+
+### C27. Pero SÍ se devuelve (200, atrasoAlDevolver > 0)
+PUT http://localhost:8000/loans/{{prestamoC.response.body.id}}/return
+Authorization: Bearer {{sofiaToken}}
