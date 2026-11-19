@@ -4,15 +4,16 @@ import { createLoanSchema, queryLoansSchema, loanIdParamSchema } from "../schema
 
 /**
  * Factory de Router para Préstamos.
+ * Requiere token; qué puede ver o hacer cada rol lo deciden los casos de uso.
  */
-function createLoansRouter(controller, auth) {
+function createLoansRouter(controller, { authenticate }) {
   const router = express.Router();
 
-   router.use(auth.authenticate); // ← 2) solo autenticados (cualquier rol)
-  router.get("/", validateQuery(queryLoansSchema), controller.list);
-  router.get("/:id", validateParams(loanIdParamSchema), controller.get);
-  router.post("/", validate(createLoanSchema), controller.create);
-  router.put("/:id/return", validateParams(loanIdParamSchema), controller.giveBack);
+  router.get("/", authenticate, validateQuery(queryLoansSchema), controller.list);
+  router.get("/:id", authenticate, validateParams(loanIdParamSchema), controller.get);
+  router.post("/", authenticate, validate(createLoanSchema), controller.create);
+  router.put("/:id/return", authenticate, validateParams(loanIdParamSchema), controller.giveBack);
+  router.put("/:id/renew", authenticate, validateParams(loanIdParamSchema), controller.renew);
 
   return router;
 }

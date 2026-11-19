@@ -3,7 +3,6 @@ import AppError from "../errors/AppError.js";
 /**
  * Controlador de Préstamos.
  * Recibe los casos de uso por inyección de dependencias; no conoce ningún DAO.
- * Pasa req.user (lo deja authenticate) como `actor`: las reglas de dueño las decide el caso de uso.
  */
 class LoansController {
   #useCases;
@@ -12,27 +11,34 @@ class LoansController {
     this.#useCases = useCases;
   }
 
-  // GET /loans?userId=&bookId=&activos=
+  // GET /loans?userId=&bookId=&activos=&desde=&hasta=
   list = async (req, res) => {
-    res.json(await this.#useCases.getLoans(req.query, req.user)); // ← CAMBIÓ
+    res.json(await this.#useCases.getLoans(req.query, req.user));
   };
 
   // GET /loans/:id
   get = async (req, res) => {
-    const loan = await this.#useCases.getLoanById(Number(req.params.id), req.user); // ← CAMBIÓ
+    const loan = await this.#useCases.getLoanById(Number(req.params.id), req.user);
     if (!loan) throw new AppError("LOAN_NOT_FOUND", "No existe un préstamo con ese id", 404);
     res.json(loan);
   };
 
   // POST /loans
   create = async (req, res) => {
-    const loan = await this.#useCases.createLoan(req.body, req.user); // ← CAMBIÓ
-    res.status(201).json(loan);
+    const loan = await this.#useCases.createLoan(req.body, req.user);
+    // 201 + Location: la URL del recurso recién creado
+    res.status(201).location(`/loans/${loan.id}`).json(loan);
   };
 
   // PUT /loans/:id/return
   giveBack = async (req, res) => {
-    const loan = await this.#useCases.returnLoan(Number(req.params.id), req.user); // ← CAMBIÓ
+    const loan = await this.#useCases.returnLoan(Number(req.params.id), req.user);
+    res.json(loan);
+  };
+
+  // PUT /loans/:id/renew — modifica un préstamo existente: 200 (ejercicio 5.9: no 201, porque no se crea ningún recurso)
+  renew = async (req, res) => {
+    const loan = await this.#useCases.renewLoan(Number(req.params.id), req.user);
     res.json(loan);
   };
 }
