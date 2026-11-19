@@ -4,9 +4,9 @@
   "description": "API REST de Biblioteca — Testing de casos de uso con Vitest, sin infraestructura (Clase 14)",
   "type": "module",
   "main": "index.js",
-  "scripts": {
+    "scripts": {
     "start": "node --env-file=.env index.js",
-    "dev": "node --env-file .env --watch index.js",
+    "dev": "node --watch --env-file=.env index.js",
     "test": "vitest run",
     "test:watch": "vitest",
     "coverage": "vitest run --coverage"
@@ -41,7 +41,7 @@
     "zod": "^4.5.4"
   },
   "devDependencies": {
-    "@vitest/coverage-v8": "^5.1.0",
-    "vitest": "^5.1.0"
+    "@vitest/coverage-v8": "^5.1.1",
+    "vitest": "^5.1.1"
   }
 }
