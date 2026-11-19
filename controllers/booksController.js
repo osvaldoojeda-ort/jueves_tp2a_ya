@@ -25,6 +25,13 @@ class BooksController {
     res.json(book);
   };
 
+    // ← NUEVO (Clase 12) GET /books/:id/details: libro local + datos del catálogo externo
+  details = async (req, res) => {
+    const book = await this.#useCases.getBookDetails(Number(req.params.id));
+    if (!book) throw new AppError("BOOK_NOT_FOUND", "No existe un libro con ese id", 404);
+    res.json(book);
+  };
+
   // POST /books
   create = async (req, res) => {
     const book = await this.#useCases.createBook(req.body);

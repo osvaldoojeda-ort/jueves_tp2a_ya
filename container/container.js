@@ -1,3 +1,7 @@
+// ← NUEVO: catálogo externo (Clase 12)
+import { IMPORT_CONCURRENCY } from "../config/config.js";
+import { getCatalog } from "../gateways/catalogFactory.js";
+
 import { getBooksDao, getUsersDao, getLoansDao } from "../dao/daoFactory.js";
 import makeBookUseCases from "../usecases/books/makeBookUseCases.js";
 import BooksController from "../controllers/BooksController.js";
@@ -60,8 +64,11 @@ async function buildContainer() {
   // ← NUEVO: admin inicial, DESPUÉS de inicializar los DAOs y el bus de eventos
   await seedAdmin({ email: ADMIN_EMAIL, password: ADMIN_PASSWORD }, usersDao, events, hasher);
 
-  // 2. Inyectamos los DAOs y el bus en las Factories de Casos de Uso
-  const bookUseCases = makeBookUseCases(booksDao, loansDao, events);
+    // ← NUEVO: catálogo externo, real (Open Library) o falso según CATALOG_TYPE. Se crea una sola vez.
+  const catalog = getCatalog();
+  const bookUseCases = makeBookUseCases(booksDao, loansDao, events, catalog, {
+    importConcurrency: IMPORT_CONCURRENCY, // ← llega por inyección: el caso de uso no lee config.js
+  });
 
   // 3. Inyectamos los Casos de Uso en los Controladores
   const booksController = new BooksController(bookUseCases);

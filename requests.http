@@ -692,3 +692,32 @@ Authorization: Bearer {{luisToken}}
 ### 89. El admin lista todos los préstamos -> 200 (ve los de todos)
 GET http://localhost:8000/loans
 Authorization: Bearer {{adminToken}}
+
+### ============ CLASE 12: CATÁLOGO EXTERNO (Open Library) Y CSV ============
+
+### B1. Detalle de un libro con ISBN (200, externalStatus: "ok")
+GET http://localhost:8000/books/1/details
+Authorization: Bearer {{adminToken}}
+
+### B2. Detalle de un libro inexistente (404 BOOK_NOT_FOUND)
+GET http://localhost:8000/books/999/details
+Authorization: Bearer {{adminToken}}
+
+### B3. Detalle sin token (401 TOKEN_MISSING)
+GET http://localhost:8000/books/1/details
+
+### B4. Crear un libro SIN ISBN
+# @name bookWithoutIsbn
+POST http://localhost:8000/books
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{
+  "titulo": "Libro sin ISBN",
+  "autor": "Autor Test",
+  "stock": 5
+}
+
+### B5. Detalle de un libro sin ISBN (200, externalStatus: "no_isbn", sin llamar a la red)
+GET http://localhost:8000/books/{{bookWithoutIsbn.response.body.id}}/details
+Authorization: Bearer {{adminToken}}

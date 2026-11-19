@@ -18,6 +18,8 @@ function createBooksRouter(controller, auth) { // ← NUEVO: auth
 
   // Públicos
   router.get("/", validateQuery(queryBooksSchema), controller.list);
+    // ← NUEVO (Clase 12). Solo autenticados: cada pedido gasta una consulta a una API de terceros
+  router.get("/:id/details", auth.authenticate, validateParams(bookIdParamSchema), controller.details);
   router.get("/:id", validateParams(bookIdParamSchema), validateQuery(queryBookByIdSchema), controller.get);
 
   // Solo admin
