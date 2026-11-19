@@ -1,4 +1,4 @@
-import { Op, literal, UniqueConstraintError } from "sequelize";
+import { Op, literal, UniqueConstraintError, Transaction } from "sequelize";
 import AppError from "../../errors/AppError.js";
 import { sequelize, BookModel, UserModel, LoanModel } from "../models/index.js";
 
@@ -19,7 +19,8 @@ class LoansSequelizeDao {
   //  - activos: true = sin devolver, false = ya devueltos
   //  - userId y bookId aceptan un número o un arreglo de números (Sequelize lo traduce a IN).
   //  - prestadoDesde (inclusive) y prestadoAntesDe (exclusive) son instantes (Date) sobre fechaPrestamo.
-  async getAll({ userId, bookId, activos, prestadoDesde, prestadoAntesDe } = {}) {
+  //  - vencidosAl ("AAAA-MM-DD", Ejercicio 9.2): sin devolver y con fechaVencimiento < ese día.
+  async getAll({ userId, bookId, activos, prestadoDesde, prestadoAntesDe, vencidosAl } = {}) {
     const where = {};
     if (userId !== undefined) where.userId = userId;
     if (bookId !== undefined) where.bookId = bookId;
@@ -29,6 +30,11 @@ class LoansSequelizeDao {
         ...(prestadoDesde !== undefined && { [Op.gte]: prestadoDesde }),
         ...(prestadoAntesDe !== undefined && { [Op.lt]: prestadoAntesDe }),
       };
+    }
+    if (vencidosAl !== undefined) {
+      // Va con Op.and para no pisar el filtro `activos` (que también mira fechaDevolucion):
+      // WHERE ... AND fechaDevolucion IS NULL AND fechaVencimiento < '2026-11-19'
+      where[Op.and] = [{ fechaDevolucion: null }, { fechaVencimiento: { [Op.lt]: vencidosAl } }];
     }
 
     const loans = await LoanModel.findAll({
@@ -57,10 +63,22 @@ class LoansSequelizeDao {
 
   // Descuenta 1 de stock y registra el préstamo en UNA transacción. Devuelve null si no hay stock.
   // Las fechas las decide el caso de uso (que tiene el reloj inyectado); el DAO solo las guarda.
-  async lend({ userId, bookId, fechaPrestamo, fechaVencimiento }) {
+  // Ejercicio 9.1 — R1 sin carrera: si llega `maxActive`, el CONTEO de préstamos activos y el ALTA van en la
+  // MISMA transacción. El índice único no puede expresar "como máximo 3", así que la base no lo frena sola.
+  // En SQLite, una transacción IMMEDIATE toma el lock de escritura al empezar: un segundo pedido simultáneo
+  // espera a que termine el primero y, cuando cuenta, ya ve el préstamo nuevo. (En PostgreSQL/MySQL se haría
+  // con SELECT ... FOR UPDATE sobre el usuario, o con nivel SERIALIZABLE.)
+  async lend({ userId, bookId, fechaPrestamo, fechaVencimiento, maxActive }) {
     let loanId;
     try {
-      loanId = await sequelize.transaction(async (t) => {
+      loanId = await sequelize.transaction({ type: Transaction.TYPES.IMMEDIATE }, async (t) => {
+        if (maxActive !== undefined) {
+          const activos = await LoanModel.count({ where: { userId, fechaDevolucion: null }, transaction: t });
+          if (activos >= maxActive) {
+            throw new AppError("LOAN_LIMIT_REACHED", `Un usuario puede tener hasta ${maxActive} préstamos activos`, 409);
+          }
+        }
+
         // UPDATE condicional: descuenta solo si stock > 0 (evita que dos pedidos simultáneos pasen de 0)
         const [affected] = await BookModel.update(
           { stock: literal("stock - 1") },

@@ -92,9 +92,17 @@ async function createLoan(data, actor, { loansDao, booksDao, usersDao, events, c
     holidays,
   });
 
-  // Nota: entre el conteo de arriba y este alta, otro pedido simultáneo podría colarse (condición de carrera).
-  // El duplicado del mismo libro lo frena el índice único de la base; el tope de 3 quedaría como ejercicio avanzado.
-  const loan = await loansDao.lend({ userId, bookId, fechaPrestamo: clock.now(), fechaVencimiento });
+  // Entre el conteo de arriba y este alta, otro pedido simultáneo podría colarse (condición de carrera).
+  // El duplicado del mismo libro lo frena el índice único de la base, y el tope (Ejercicio 9.1) lo vuelve a contar
+  // el DAO dentro de la misma transacción del alta: por eso le pasamos maxActive.
+  // El chequeo de arriba se mantiene: resuelve el caso normal sin abrir una transacción ni consultar feriados.
+  const loan = await loansDao.lend({
+    userId,
+    bookId,
+    fechaPrestamo: clock.now(),
+    fechaVencimiento,
+    maxActive: loanRules.maxActive,
+  });
   if (!loan) {
     throw new AppError("OUT_OF_STOCK", "No hay stock disponible de ese libro", 409);
   }

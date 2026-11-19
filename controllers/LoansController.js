@@ -11,7 +11,7 @@ class LoansController {
     this.#useCases = useCases;
   }
 
-  // GET /loans?userId=&bookId=&activos=&desde=&hasta=
+    // GET /loans?userId=&bookId=&activos=&desde=&hasta=&vencidos=true
   list = async (req, res) => {
     res.json(await this.#useCases.getLoans(req.query, req.user));
   };

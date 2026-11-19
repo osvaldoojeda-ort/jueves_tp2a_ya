@@ -33,7 +33,8 @@ class LoansMemoryDao {
   //  - activos: true = sin devolver, false = ya devueltos
   //  - userId y bookId aceptan un número o un arreglo de números (equivale a IN).
   //  - prestadoDesde (inclusive) y prestadoAntesDe (exclusive) son instantes (Date) sobre fechaPrestamo.
-  async getAll({ userId, bookId, activos, prestadoDesde, prestadoAntesDe } = {}) {
+  //  - vencidosAl ("AAAA-MM-DD", Ejercicio 9.2): sin devolver y con fechaVencimiento < ese día.
+  async getAll({ userId, bookId, activos, prestadoDesde, prestadoAntesDe, vencidosAl } = {}) {
     const matches = (filter, value) => filter === undefined || [filter].flat().includes(value);
     const result = this.#loans.filter(
       (l) =>
@@ -41,7 +42,8 @@ class LoansMemoryDao {
         matches(bookId, l.bookId) &&
         (activos === undefined || (l.fechaDevolucion === null) === activos) &&
         (prestadoDesde === undefined || l.fechaPrestamo >= prestadoDesde) &&
-        (prestadoAntesDe === undefined || l.fechaPrestamo < prestadoAntesDe)
+        (prestadoAntesDe === undefined || l.fechaPrestamo < prestadoAntesDe) &&
+        (vencidosAl === undefined || (l.fechaDevolucion === null && l.fechaVencimiento < vencidosAl))
     );
     return Promise.all(result.map((l) => this.#withRelations(l)));
   }
@@ -61,11 +63,16 @@ class LoansMemoryDao {
 
   // Descuenta 1 de stock y registra el préstamo. Devuelve null si no hay stock.
   // Las fechas las decide el caso de uso (que tiene el reloj inyectado); el DAO solo las guarda.
-  async lend({ userId, bookId, fechaPrestamo, fechaVencimiento }) {
+  // Ejercicio 9.1 — si llega `maxActive`, el conteo también va en el mismo paso síncrono que el alta.
+  async lend({ userId, bookId, fechaPrestamo, fechaVencimiento, maxActive }) {
     // Equivalente al índice único parcial de Sequelize: chequeo y alta en el MISMO paso síncrono
     // (sin un await en el medio), así dos pedidos simultáneos no pueden pasar los dos.
-    if (this.#loans.some((l) => l.userId === userId && l.bookId === bookId && l.fechaDevolucion === null)) {
+    const activosDelUsuario = this.#loans.filter((l) => l.userId === userId && l.fechaDevolucion === null);
+    if (activosDelUsuario.some((l) => l.bookId === bookId)) {
       throw new AppError("ALREADY_LOANED", "El usuario ya tiene ese libro sin devolver", 409);
+    }
+    if (maxActive !== undefined && activosDelUsuario.length >= maxActive) {
+      throw new AppError("LOAN_LIMIT_REACHED", `Un usuario puede tener hasta ${maxActive} préstamos activos`, 409);
     }
     const loan = { id: this.#nextId++, userId, bookId, fechaPrestamo, fechaVencimiento, fechaDevolucion: null, renovaciones: 0 };
     this.#loans.push(loan);

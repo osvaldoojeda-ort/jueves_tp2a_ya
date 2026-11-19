@@ -924,3 +924,17 @@ Authorization: Bearer {{sofiaToken}}
 ### C27. Pero SÍ se devuelve (200, atrasoAlDevolver > 0)
 PUT http://localhost:8000/loans/{{prestamoC.response.body.id}}/return
 Authorization: Bearer {{sofiaToken}}
+
+### ============ CLASE 13 — EJERCICIO 9 (opcional) ============
+
+### C28. 9.2: préstamos vencidos (lo resuelve la base). Con CLOCK_NOW=2027-01-15T12:00:00Z aparecen los de Sofía.
+GET http://localhost:8000/loans?vencidos=true
+Authorization: Bearer {{adminToken}}
+
+### C29. 9.2: vencidos + activos=false → [] (un préstamo devuelto nunca está vencido)
+GET http://localhost:8000/loans?activos=false&vencidos=true
+Authorization: Bearer {{adminToken}}
+
+### C30. 9.2: vencidos=false no se admite (400 VALIDATION_ERROR)
+GET http://localhost:8000/loans?vencidos=false
+Authorization: Bearer {{adminToken}}

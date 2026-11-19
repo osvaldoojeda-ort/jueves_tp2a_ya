@@ -6,6 +6,20 @@ import { addBusinessDays, addCalendarDays } from "../../domain/businessDays.js";
  * Pide los feriados al gateway inyectado y, si la API falla, DEGRADA con elegancia: calcula solo con
  * fines de semana y lo informa (holidaysAvailable: false). Que un tercero esté caído no debe impedir prestar un libro.
  *
+ * Ejercicio 9.4 — Si la biblioteca tuviera sedes en dos provincias con feriados distintos:
+ *  CAMBIA:
+ *   - El contrato del gateway: getHolidays(year, provincia), y su caché pasa a ser por año + provincia
+ *     (ArgentinaDatos solo trae los nacionales: los provinciales vendrían de otra fuente o de una tabla propia).
+ *   - El modelo: el préstamo (o el ejemplar del libro) necesita saber en qué sede se retira (columna sedeId).
+ *   - Este caso de uso y createLoan/renewLoan: reciben la provincia de la sede y se la pasan al gateway.
+ *   - Los datos del fake: feriados por provincia.
+ *  NO CAMBIA:
+ *   - addBusinessDays, isOverdue y withStatus: son puras y reciben la lista de feriados ya armada.
+ *   - El reloj: Argentina tiene un solo huso horario (si una sede estuviera en otro país, today() pasaría
+ *     a depender de la zona de la sede).
+ *   - Las reglas R1, R3, R4 y R5, los status codes, los DAOs (salvo la columna nueva) y el container
+ *     (sigue inyectando un único gateway de feriados).
+ *
  * @returns {{ fechaVencimiento: string, holidaysAvailable: boolean }}
  */
 async function calculateDueDate({ fromDate, businessDays, holidays }) {

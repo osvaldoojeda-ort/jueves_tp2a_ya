@@ -29,6 +29,8 @@ const queryLoansSchema = z
     activos: activosSchema.optional(),
     desde: dateOnly.optional(), // fechaPrestamo desde (inclusive)
     hasta: dateOnly.optional(), // fechaPrestamo hasta (inclusive)
+    // Ejercicio 9.2: solo "true" (préstamos sin devolver con el vencimiento ya pasado)
+    vencidos: z.enum(["true"], { error: "vencidos solo admite 'true'" }).transform(() => true).optional(),
   })
   .refine((q) => !q.desde || !q.hasta || q.desde <= q.hasta, {
     message: "'desde' no puede ser posterior a 'hasta'",
