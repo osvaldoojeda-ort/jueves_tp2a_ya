@@ -17,6 +17,37 @@ import makeLoanUseCases from "../../usecases/loans/makeLoanUseCases.js";
  * y el resultado dependería del ORDEN en que corren los tests. Instanciamos la clase en cada escenario.
  */
 
+/*
+ * ===================== RESPUESTAS DE LA CLASE 14 =====================
+ *
+ * 4.6 ¿Por qué hay que COPIAR cada libro antes de pasárselo al DAO?
+ *   Porque BooksMemoryDao.adjustStock modifica el objeto que guarda (book.stock += delta). Si le pasáramos el
+ *   mismo objeto de BOOKS, el primer test que presta el libro 1 le bajaría el stock "para siempre", y el
+ *   siguiente test arrancaría con 4 en vez de 5. Copiando, cada escenario tiene sus propios libros.
+ *
+ * 1.6 ¿Por qué Vitest va en devDependencies? Porque solo se usa para desarrollar y testear: el servidor nunca lo
+ *   importa. En producción se instala con `npm ci --omit=dev`; si estuviera en dependencies, se instalaría igual:
+ *   más megas, más tiempo de deploy y más paquetes con posibles vulnerabilidades, sin ningún beneficio.
+ *
+ * 2.1 Borde del ISBN 9780000000040 (dígito de control 0): falla la implementación que olvida el último % 10.
+ *   Con suma 100, 10 - (100 % 10) da 10, no 0. Todos los demás casos tienen dígito 1 a 9 y pasan igual.
+ *
+ * 3.1 ¿Por qué hace falta la función flecha en expect(() => createClock(...)).toThrow()? Porque el error tiene que
+ *   ocurrir ADENTRO de expect. Sin la flecha, createClock(...) se ejecuta antes de llamar a expect, el error sale
+ *   y corta el test antes de que expect pueda atraparlo y compararlo.
+ *
+ * 5.8 Sacarle el `await` a un `expect(...).rejects`: en Vitest 5 el test SÍ se pone en rojo, con el mensaje
+ *   "Promise returned by `expect(actual).rejects...` was not awaited". En versiones viejas quedaba en VERDE: el
+ *   test terminaba antes de que la promesa se resolviera, y la aserción fallida aparecía (si aparecía) como un
+ *   "unhandled rejection" suelto. Era un falso positivo: por eso siempre `await expect(...).rejects`.
+ *
+ * 8.3 ¿Cuánto tardaría la suite con bcrypt real (10 rondas) en loginUser? Cada hash/compare tarda ~50-100 ms:
+ *   unos pocos segundos solo para ese archivo, en vez de milisegundos. Con Open Library real en importBooks:
+ *   cientos de ms por pedido, dependería de internet, y si la API está caída los tests fallarían sin que nuestro
+ *   código tenga un bug. Los stubs hacen la suite rápida y determinista.
+ * =====================================================================
+ */
+
 // Actores: lo que el middleware de auth deja en req.user (el caso de uso solo mira id y rol)
 export const ANA = { id: 1, rol: "lector" };
 export const BETO = { id: 2, rol: "lector" };
