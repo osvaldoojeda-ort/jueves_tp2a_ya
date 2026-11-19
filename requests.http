@@ -781,3 +781,30 @@ Content-Type: application/json
 {
   "isbns": []
 }
+
+### B16. Exportar los libros a CSV (se descarga)
+GET http://localhost:8000/books/export.csv
+Authorization: Bearer {{adminToken}}
+
+### B17. Exportar con los filtros del listado: autor + orden descendente por título
+GET http://localhost:8000/books/export.csv?autor=a&sort=-titulo
+Authorization: Bearer {{adminToken}}
+
+### B18. Exportar enriquecido (editorial, páginas, fecha) con UN solo pedido en lote (mirá el header X-Enrichment)
+GET http://localhost:8000/books/export.csv?enriquecer=true
+Authorization: Bearer {{adminToken}}
+
+### B19. Exportar como lector (403)
+GET http://localhost:8000/books/export.csv
+Authorization: Bearer {{lectorToken}}
+
+### B20. Exportar sin token (401)
+GET http://localhost:8000/books/export.csv
+
+### B21. (Opcional) Separador ";" para que Excel en español lo abra en columnas
+GET http://localhost:8000/books/export.csv?enriquecer=true&separador=;
+Authorization: Bearer {{adminToken}}
+
+### B22. (Opcional) Separador inválido (400 Zod)
+GET http://localhost:8000/books/export.csv?separador=x
+Authorization: Bearer {{adminToken}}  

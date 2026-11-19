@@ -5,6 +5,7 @@ import updateBook from "./updateBook.js";
 import deleteBook from "./deleteBook.js";
 import getBookDetails from "./getBookDetails.js";
 import importBooks from "./importBooks.js"; // ← NUEVO
+import exportBooksCsv from "./exportBooksCsv.js"; // ← NUEVO
 
 /**
  * Factory de Casos de Uso para Libros.
@@ -23,6 +24,8 @@ function makeBookUseCases(dao, loansDao, events, catalog, { importConcurrency } 
     getBookDetails: (id) => getBookDetails(id, dao, catalog),
     // ← NUEVO: la concurrencia llega por inyección, no se lee de config.js
     importBooks: (params) => importBooks(params, dao, catalog, createBookUseCase, importConcurrency),
+        // ← NUEVO: reutiliza getBooks, así el CSV acepta los mismos filtros que el listado
+    exportBooksCsv: (params) => exportBooksCsv(params, (filters) => getBooks(filters, dao, loansDao), catalog),
   };
 }
 

@@ -7,6 +7,7 @@ import {
   queryBookByIdSchema,
   bookIdParamSchema,
   importBooksSchema, // ← NUEVO
+  exportBooksQuerySchema, // ← NUEVO
 } from "../schemas/bookSchema.js";
 
 /**
@@ -19,9 +20,14 @@ function createBooksRouter(controller, auth) { // ← NUEVO: auth
 
   // Públicos
   router.get("/", validateQuery(queryBooksSchema), controller.list);
-    // ← NUEVO (Clase 12). Solo autenticados: cada pedido gasta una consulta a una API de terceros
-  router.get("/:id/details", auth.authenticate, validateParams(bookIdParamSchema), controller.details);
+    // ← NUEVO (Clase 12). Ej. 6.6 — ¿Qué pasaría si "/export.csv" se declarara DESPUÉS de "/:id"?
+  // Express prueba las rutas en el orden en que se declaran, y "/:id" acepta cualquier texto, incluido
+  // "export.csv". La validación del id (número entero) respondería un 400 confuso y la exportación nunca
+  // se ejecutaría. Por eso las rutas fijas van antes que las que tienen parámetros.
+  router.get("/export.csv", ...onlyAdmin, validateQuery(exportBooksQuerySchema), controller.exportCsv);
+  // ← NUEVO (Clase 12). Solo autenticados: cada pedido gasta una consulta a una API de terceros
   router.post("/import", ...onlyAdmin, validate(importBooksSchema), controller.import);
+  router.get("/:id/details", auth.authenticate, validateParams(bookIdParamSchema), controller.details);
   router.get("/:id", validateParams(bookIdParamSchema), validateQuery(queryBookByIdSchema), controller.get);
 
   // Solo admin

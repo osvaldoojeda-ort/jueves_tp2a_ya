@@ -25,16 +25,24 @@ class BooksController {
     res.json(book);
   };
 
-    // ← NUEVO (Clase 12) GET /books/:id/details: libro local + datos del catálogo externo
+  // ← NUEVO (Clase 12) GET /books/:id/details: libro local + datos del catálogo externo
   details = async (req, res) => {
     const book = await this.#useCases.getBookDetails(Number(req.params.id));
     if (!book) throw new AppError("BOOK_NOT_FOUND", "No existe un libro con ese id", 404);
     res.json(book);
   };
 
-    // ← NUEVO (Clase 12) POST /books/import: alta de libros a partir de sus ISBN
+  // ← NUEVO (Clase 12) POST /books/import: alta de libros a partir de sus ISBN
   import = async (req, res) => {
     res.json(await this.#useCases.importBooks(req.body));
+  };
+
+  // ← NUEVO (Clase 12) GET /books/export.csv (?autor=&sort=&enriquecer=true&separador=;)
+  exportCsv = async (req, res) => {
+    const { csv, filename, enrichment } = await this.#useCases.exportBooksCsv(req.query);
+    res.set("X-Enrichment", enrichment); // ok | unavailable | skipped
+    res.attachment(filename); // Content-Disposition: attachment (se descarga) + Content-Type: text/csv
+    res.send(csv);
   };
 
   // POST /books
