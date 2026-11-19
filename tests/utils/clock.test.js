@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+﻿import { describe, it, expect } from "vitest";
 import createClock from "../../utils/clock.js";
 
 describe("createClock", () => {

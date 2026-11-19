@@ -1,6 +1,6 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+﻿import { describe, it, expect, vi, beforeEach } from "vitest";
 import { BooksMemoryDao } from "../../../dao/books/BooksMemoryDao.js";
-import createBook from "../../../usecases/books/createBook.js";
+import createBook from "../../../useCases/books/createBook.js";
 import EVENTS from "../../../events/eventNames.js";
 
 /**
@@ -8,7 +8,13 @@ import EVENTS from "../../../events/eventNames.js";
  * JWT_SECRET: este archivo de test explotaba ANTES de correr un solo test. El test nos mostró un acoplamiento,
  * y la solución fue la de siempre: inyectar el umbral. Ahora el caso de uso recibe (data, dao, events, lowStockThreshold).
  *
- * Acá usamos beforeEach en lugar de un helper: cada test arranca con un DAO y un espía NUEVOS.
+ * Acá usamos beforeEach en lugar de un helper: cada test arranca con un DAO y un espía NUEVOS.\
+ *  
+ * Ejercicio 7.1 — El error que apareció al correr este archivo SIN .env, antes del refactor:
+ *   FAIL  tests/useCases/books/createBook.test.js
+ *   Error: [config] Falta la variable de entorno JWT_SECRET. Revisá tu .env
+ *    ❯ required config/config.js:12
+ * (Las respuestas al 7.2 y al 7.6 están en tests/helpers/loanScenario.js.)
  */
 
 let dao;

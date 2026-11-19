@@ -13,7 +13,7 @@ export default defineConfig({
     restoreMocks: true,
     coverage: {
       provider: "v8",
-      include: ["domain/**", "usecases/**", "utils/**"],
+      include: ["domain/**", "useCases/**", "utils/**"], // la carpeta se llama useCases, con C mayúscula
       reporter: ["text", "html"], // "html" deja un reporte navegable en coverage/index.html
     },
   },

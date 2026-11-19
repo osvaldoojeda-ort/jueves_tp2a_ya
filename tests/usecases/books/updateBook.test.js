@@ -1,6 +1,6 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+﻿import { describe, it, expect, vi, beforeEach } from "vitest";
 import { BooksMemoryDao } from "../../../dao/books/BooksMemoryDao.js";
-import updateBook from "../../../usecases/books/updateBook.js";
+import updateBook from "../../../useCases/books/updateBook.js";
 import EVENTS from "../../../events/eventNames.js";
 
 let dao;

@@ -1,5 +1,5 @@
-import { describe, it, expect, vi } from "vitest";
-import calculateDueDate from "../../../usecases/loans/calculateDueDate.js";
+﻿import { describe, it, expect, vi } from "vitest";
+import calculateDueDate from "../../../useCases/loans/calculateDueDate.js";
 import AppError from "../../../errors/AppError.js";
 
 /**

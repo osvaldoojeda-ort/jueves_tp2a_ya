@@ -9,11 +9,16 @@ const INCLUDE = [
   { model: BookModel, as: "libro", attributes: ["id", "titulo"] },
 ];
 
+
+// Señal interna para deshacer la transacción de lend() cuando no hay stock (no sale de este archivo)
+class SinStock extends Error {}
+
 /**
  * Adaptador DAO para Préstamos utilizando Sequelize (SQL).
  * Debe respetar la misma interfaz pública que LoansMemoryDao.
  * La tabla `loans` la crea sequelize.sync() desde BooksSequelizeDao.init().
  */
+
 class LoansSequelizeDao {
   // filters: { userId, bookId, activos, prestadoDesde, prestadoAntesDe }
   //  - activos: true = sin devolver, false = ya devueltos
@@ -55,34 +60,40 @@ class LoansSequelizeDao {
     return loan ? loan.get({ plain: true }) : null;
   }
 
-  // Descuenta 1 de stock y registra el préstamo en UNA transacción. Devuelve null si no hay stock.
+    // Registra el préstamo y descuenta 1 de stock en UNA transacción. Devuelve null si no hay stock.
   // Las fechas las decide el caso de uso (que tiene el reloj inyectado); el DAO solo las guarda.
+  // Clase 14 - Ej. 10.2: el test de contrato mostró que, si el usuario YA tenía el último ejemplar, este adaptador
+  // devolvía null ("sin stock") y el de memoria ALREADY_LOANED. Ahora el orden es el mismo que en memoria:
+  // primero el ALTA (el índice único parcial rechaza el duplicado) y después el stock (si no hay, se deshace todo).
   async lend({ userId, bookId, fechaPrestamo, fechaVencimiento }) {
     let loanId;
     try {
       loanId = await sequelize.transaction(async (t) => {
+        const loan = await LoanModel.create({ userId, bookId, fechaPrestamo, fechaVencimiento }, { transaction: t });
+
         // UPDATE condicional: descuenta solo si stock > 0 (evita que dos pedidos simultáneos pasen de 0)
         const [affected] = await BookModel.update(
           { stock: literal("stock - 1") },
           { where: { id: bookId, stock: { [Op.gt]: 0 } }, transaction: t }
         );
-        if (affected === 0) return null;
+        // Sin stock: lanzar hace que Sequelize haga ROLLBACK y el alta de arriba desaparece
+        if (affected === 0) throw new SinStock();
 
-        const loan = await LoanModel.create({ userId, bookId, fechaPrestamo, fechaVencimiento }, { transaction: t });
         return loan.id;
       });
     } catch (err) {
+      if (err instanceof SinStock) return null;
       // El índice único parcial rechazó un segundo préstamo activo del mismo libro (pedidos simultáneos).
-      // La transacción se deshizo entera (el stock también). El adaptador traduce el error de la base a uno del dominio.
+      // La transacción se deshizo entera. El adaptador traduce el error de la base a uno del dominio.
       if (err instanceof UniqueConstraintError) {
         throw new AppError("ALREADY_LOANED", "El usuario ya tiene ese libro sin devolver", 409);
       }
       throw err;
     }
 
-    return loanId ? this.getById(loanId) : null;
+    return this.getById(loanId);
   }
-
+  
   // Renueva en UN solo UPDATE condicional: solo si sigue activo y nadie lo renovó en el medio
   // (renovacionesPrevias = lo que leyó el caso de uso). Mira y escribe en un paso: sin condición de carrera.
   async renew(id, { fechaVencimiento, renovacionesPrevias }) {

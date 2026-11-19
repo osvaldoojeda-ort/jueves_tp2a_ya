@@ -1,6 +1,6 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+﻿import { describe, it, expect, vi, beforeEach } from "vitest";
 import { UsersMemoryDao } from "../../../dao/users/UsersMemoryDao.js";
-import loginUser from "../../../usecases/auth/loginUser.js";
+import loginUser from "../../../useCases/auth/loginUser.js";
 
 /**
  * loginUser depende de bcrypt (lento a propósito) y de jsonwebtoken (necesita un secreto).

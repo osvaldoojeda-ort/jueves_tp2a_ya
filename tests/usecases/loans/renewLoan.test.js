@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+﻿import { describe, it, expect } from "vitest";
 import { buildLoanScenario, ANA, BETO, ADMIN } from "../../helpers/loanScenario.js";
 
 /**
@@ -106,5 +106,61 @@ describe("renewLoan", () => {
     loansDao.renew = async () => null;
 
     await expect(useCases.renewLoan(loan.id, ANA)).rejects.toMatchObject({ code: "LOAN_CHANGED", statusCode: 409 });
+  });
+
+  // Clase 14 - Ejercicio 10.3 (TDD): R6 se escribió TEST PRIMERO. Este fue el primer test, y arrancó en ROJO.
+  describe("R6: no se renueva si el usuario tiene OTRO préstamo vencido", () => {
+    it("tiene otro vencido → 409 USER_HAS_OVERDUE_LOANS (con el detalle) y el vencimiento no cambia", async () => {
+      const { useCases, givenLoan, loansDao } = buildLoanScenario(); // hoy: 2026-11-04
+      const loan = await givenLoan({ userId: ANA.id, bookId: 1, fechaVencimiento: "2026-11-19" });
+      const vencido = await givenLoan({ userId: ANA.id, bookId: 2, fechaVencimiento: "2026-10-28" });
+
+      await expect(useCases.renewLoan(loan.id, ANA)).rejects.toMatchObject({
+        code: "USER_HAS_OVERDUE_LOANS",
+        statusCode: 409,
+        details: [{ loanId: vencido.id, bookId: 2, fechaVencimiento: "2026-10-28" }],
+      });
+      expect(await loansDao.getById(loan.id)).toMatchObject({ fechaVencimiento: "2026-11-19", renovaciones: 0 });
+    });
+
+    // Los que siguen se agregaron DESPUÉS del verde: cuidan los bordes de la regla
+    it("un préstamo vencido que YA devolvió no bloquea", async () => {
+      const { useCases, givenLoan } = buildLoanScenario();
+      const loan = await givenLoan({ userId: ANA.id, bookId: 1, fechaVencimiento: "2026-11-19" });
+      await givenLoan({ userId: ANA.id, bookId: 2, fechaVencimiento: "2026-10-28", devueltoEl: "2026-10-30" });
+
+      await expect(useCases.renewLoan(loan.id, ANA)).resolves.toMatchObject({ renovaciones: 1 });
+    });
+
+    it("el vencido de OTRO usuario no bloquea", async () => {
+      const { useCases, givenLoan } = buildLoanScenario();
+      const loan = await givenLoan({ userId: ANA.id, bookId: 1, fechaVencimiento: "2026-11-19" });
+      await givenLoan({ userId: BETO.id, bookId: 2, fechaVencimiento: "2026-10-28" });
+
+      await expect(useCases.renewLoan(loan.id, ANA)).resolves.toMatchObject({ renovaciones: 1 });
+    });
+
+    it("se mira al DUEÑO del préstamo, no a quien renueva: el admin tampoco puede renovarlo", async () => {
+      const { useCases, givenLoan } = buildLoanScenario();
+      const loan = await givenLoan({ userId: ANA.id, bookId: 1, fechaVencimiento: "2026-11-19" });
+      await givenLoan({ userId: ANA.id, bookId: 2, fechaVencimiento: "2026-10-28" });
+
+      await expect(useCases.renewLoan(loan.id, ADMIN)).rejects.toMatchObject({ code: "USER_HAS_OVERDUE_LOANS" });
+    });
+
+    it("orden: si el préstamo que quiere renovar es EL vencido, responde LOAN_OVERDUE (R6 habla de OTRO)", async () => {
+      const { useCases, givenLoan } = buildLoanScenario();
+      const loan = await givenLoan({ userId: ANA.id, bookId: 1, fechaVencimiento: "2026-10-28" });
+
+      await expect(useCases.renewLoan(loan.id, ANA)).rejects.toMatchObject({ code: "LOAN_OVERDUE" });
+    });
+
+    it("borde: otro préstamo que vence HOY todavía no está vencido, no bloquea", async () => {
+      const { useCases, givenLoan } = buildLoanScenario();
+      const loan = await givenLoan({ userId: ANA.id, bookId: 1, fechaVencimiento: "2026-11-19" });
+      await givenLoan({ userId: ANA.id, bookId: 2, fechaVencimiento: "2026-11-04" });
+
+      await expect(useCases.renewLoan(loan.id, ANA)).resolves.toMatchObject({ renovaciones: 1 });
+    });
   });
 });

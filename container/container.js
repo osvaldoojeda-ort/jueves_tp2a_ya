@@ -1,11 +1,11 @@
-import { getBooksDao, getUsersDao, getLoansDao } from "../dao/daoFactory.js";
-import makeBookUseCases from "../usecases/books/makeBookUseCases.js";
-import BooksController from "../controllers/BooksController.js";
+﻿import { getBooksDao, getUsersDao, getLoansDao } from "../dao/daoFactory.js";
+import makeBookUseCases from "../useCases/books/makeBookUseCases.js";
+import BooksController from "../controllers/booksController.js";
 import createBooksRouter from "../routes/booksRoutes.js";
-import makeUserUseCases from "../usecases/users/makeUserUseCases.js";
+import makeUserUseCases from "../useCases/users/makeUserUseCases.js";
 import UsersController from "../controllers/UsersController.js";
 import createUsersRouter from "../routes/usersRoutes.js";
-import makeLoanUseCases from "../usecases/loans/makeLoanUseCases.js";
+import makeLoanUseCases from "../useCases/loans/makeLoanUseCases.js";
 import LoansController from "../controllers/LoansController.js";
 import createLoansRouter from "../routes/loansRoutes.js";
 import createEventBus from "../events/eventBus.js";
@@ -14,13 +14,13 @@ import registerAlertListeners from "../alerts/registerAlertListeners.js";
 import createPasswordHasher from "../security/passwordHasher.js";
 import createTokenService from "../security/tokenService.js";
 import createAuthMiddlewares from "../middlewares/auth.js";
-import makeAuthUseCases from "../usecases/auth/makeAuthUseCases.js";
-import seedAdmin from "../usecases/auth/seedAdmin.js";
+import makeAuthUseCases from "../useCases/auth/makeAuthUseCases.js";
+import seedAdmin from "../useCases/auth/seedAdmin.js";
 import AuthController from "../controllers/AuthController.js";
 import createAuthRouter from "../routes/authRoutes.js";
 import { JWT_SECRET, JWT_EXPIRES_IN, BCRYPT_ROUNDS, ADMIN_EMAIL, ADMIN_PASSWORD } from "../config/config.js";
 import { getCatalog } from "../gateways/catalogFactory.js";
-import makeCatalogUseCases from "../usecases/catalog/makeCatalogUseCases.js";
+import makeCatalogUseCases from "../useCases/catalog/makeCatalogUseCases.js";
 import CatalogController from "../controllers/CatalogController.js";
 import createCatalogRouter from "../routes/catalogRoutes.js";
 import { IMPORT_CONCURRENCY, LOW_STOCK_THRESHOLD, LOAN_MAX_ACTIVE, LOAN_BUSINESS_DAYS, LOAN_MAX_RENEWALS, CLOCK_NOW } from "../config/config.js";
@@ -69,9 +69,9 @@ async function buildContainer() {
   // Catálogo externo: gateway real (Open Library) o falso, según CATALOG_TYPE
   const catalog = getCatalog();
 
-  const bookUseCases = makeBookUseCases(booksDao, loansDao, events, catalog, {
-    importConcurrency: IMPORT_CONCURRENCY,
-    lowStockThreshold: LOW_STOCK_THRESHOLD, // Clase 14: inyectado (antes createBook/updateBook importaban config.js)
+    const bookUseCases = makeBookUseCases(booksDao, loansDao, events, catalog, {
+    importConcurrency: IMPORT_CONCURRENCY, // ← llega por inyección: el caso de uso no lee config.js
+    lowStockThreshold: LOW_STOCK_THRESHOLD, // ← NUEVO (Clase 14): antes createBook/updateBook importaban config.js
   });
 
   // 3. Inyectamos los Casos de Uso en los Controladores

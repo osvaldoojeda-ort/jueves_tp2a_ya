@@ -1,7 +1,9 @@
 import AppError from "../../errors/AppError.js";
 import EVENTS from "../../events/eventNames.js";
-import { isOverdue, withStatus } from "../../domain/loanStatus.js";
+import { withStatus } from "../../domain/loanStatus.js";
 import calculateDueDate from "./calculateDueDate.js";
+
+import assertNoOverdueLoans from "./assertNoOverdueLoans.js"; // ← NUEVO (Clase 14 - Ej. 10.3)
 
 // Ejercicio 8.6 — Status codes de POST /loans:
 //   | Situación                        | Status | code                                         |
@@ -66,15 +68,7 @@ async function createLoan(data, actor, { loansDao, booksDao, usersDao, events, c
   }
 
   // R3 va antes que R1: si tiene un préstamo vencido, el mensaje útil es "devolvelo", no "llegaste al tope"
-  const overdue = activeLoans.filter((loan) => isOverdue(loan, today));
-  if (overdue.length > 0) {
-    throw new AppError(
-      "USER_HAS_OVERDUE_LOANS",
-      "El usuario tiene préstamos vencidos: debe devolverlos antes de pedir otros",
-      409,
-      overdue.map((loan) => ({ loanId: loan.id, bookId: loan.bookId, fechaVencimiento: loan.fechaVencimiento }))
-    );
-  }
+  assertNoOverdueLoans(activeLoans, today, "pedir otros"); // ← CAMBIÓ (Clase 14 - Ej. 10.3): regla compartida con R6
 
   // R1: el tope es configuración, y el mensaje dice cuál es (el cliente entiende el motivo sin adivinar)
   if (activeLoans.length >= loanRules.maxActive) {
