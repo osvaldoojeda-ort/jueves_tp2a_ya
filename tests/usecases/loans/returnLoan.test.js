@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { buildLoanScenario, ANA, BETO, ADMIN } from "../../helpers/loanScenario.js";
 
 describe("returnLoan", () => {
@@ -45,5 +45,18 @@ describe("returnLoan", () => {
     const { useCases } = buildLoanScenario();
 
     await expect(useCases.returnLoan(42, ANA)).rejects.toMatchObject({ code: "LOAN_NOT_FOUND", statusCode: 404 });
+  });
+  
+  // Clase 14 - Ejercicio 10.1: la línea de CARRERA. Entre el getById y el giveBack, otro pedido devolvió el préstamo:
+  // el UPDATE condicional del DAO no afecta ninguna fila y devuelve null. Con un stub forzamos esa situación,
+  // que con dos pedidos reales sería casi imposible de reproducir a voluntad.
+  it("si otro pedido lo devolvió justo antes (giveBack → null) → 409 ALREADY_RETURNED", async () => {
+    const { useCases, loansDao, givenLoan, stockOf } = buildLoanScenario();
+    const loan = await givenLoan({ userId: ANA.id, bookId: 1, fechaVencimiento: "2026-11-19" });
+    vi.spyOn(loansDao, "giveBack").mockResolvedValue(null);
+
+    await expect(useCases.returnLoan(loan.id, ANA)).rejects.toMatchObject({ code: "ALREADY_RETURNED", statusCode: 409 });
+    expect(loansDao.giveBack).toHaveBeenCalledOnce();
+    expect(await stockOf(1)).toBe(4); // el stub no repuso nada: el stock quedó como estaba
   });
 });
