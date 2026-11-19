@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+﻿import { describe, it, expect } from "vitest";
 import { buildLoanScenario, ANA, BETO } from "../../helpers/loanScenario.js";
 import deleteUser from "../../../useCases/users/deleteUser.js";
 

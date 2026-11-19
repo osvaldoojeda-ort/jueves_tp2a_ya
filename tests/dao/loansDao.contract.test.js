@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from "vitest";
+﻿import { describe, it, expect, beforeEach, vi } from "vitest";
 
 // Clase 14 - Ejercicio 10.2: el adaptador de Sequelize usa la conexión de connection/sequelize.js, que apunta a
 // ./database.sqlite. Para el test la reemplazamos por una base SQLite EN MEMORIA: se crea vacía en cada corrida,

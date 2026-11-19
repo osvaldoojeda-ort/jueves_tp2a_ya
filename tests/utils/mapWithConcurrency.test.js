@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+﻿import { describe, it, expect } from "vitest";
 import mapWithConcurrency from "../../utils/mapWithConcurrency.js";
 
 // Una espera corta para simular un pedido a una API

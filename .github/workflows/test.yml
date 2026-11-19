@@ -1,0 +1,21 @@
+# Clase 14 - Ejercicio 10.5: Integración continua.
+# En cada push (a cualquier rama) y en cada pull request, GitHub levanta una máquina Linux limpia,
+# instala EXACTAMENTE las dependencias del package-lock.json y corre los tests.
+# Si algo falla, el commit queda marcado con una ❌ y el PR muestra que no pasa.
+name: Tests
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6          # baja el código del repo
+      - uses: actions/setup-node@v6        # instala Node (la misma versión que usamos)
+        with:
+          node-version: 24
+          cache: npm                       # guarda node_modules entre corridas: más rápido
+      - run: npm ci                        # instala desde package-lock.json (reproducible), no "npm install"
+      - run: npm test                      # vitest run: si falla un test, falla el workflow

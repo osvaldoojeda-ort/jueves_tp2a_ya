@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+﻿import { describe, it, expect } from "vitest";
 import { isOverdue, loanStatus, withStatus } from "../../domain/loanStatus.js";
 
 // Un "préstamo" para estos tests es solo un objeto: no hace falta ningún DAO

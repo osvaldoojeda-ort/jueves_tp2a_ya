@@ -1,10 +1,10 @@
-import { BooksMemoryDao } from "../../dao/books/BooksMemoryDao.js";
+﻿import { BooksMemoryDao } from "../../dao/books/BooksMemoryDao.js";
 import { UsersMemoryDao } from "../../dao/users/UsersMemoryDao.js";
 import { LoansMemoryDao } from "../../dao/loans/LoansMemoryDao.js";
 import createEventBus from "../../events/eventBus.js";
 import createClock from "../../utils/clock.js";
 import createFakeHolidays from "../../gateways/fakeHolidays.js";
-import makeLoanUseCases from "../../usecases/loans/makeLoanUseCases.js";
+import makeLoanUseCases from "../../useCases/loans/makeLoanUseCases.js";
 
 /**
  * Helper de escenarios para los tests de préstamos (Clase 14).

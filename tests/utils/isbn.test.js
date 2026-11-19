@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+﻿import { describe, it, expect } from "vitest";
 import { hasValidIsbn13Checksum } from "../../utils/isbn.js";
 
 describe("hasValidIsbn13Checksum", () => {
