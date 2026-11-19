@@ -2,6 +2,10 @@
 import { IMPORT_CONCURRENCY } from "../config/config.js";
 import { getCatalog } from "../gateways/catalogFactory.js";
 
+import makeCatalogUseCases from "../usecases/catalog/makeCatalogUseCases.js";
+import CatalogController from "../controllers/CatalogController.js";
+import createCatalogRouter from "../routes/catalogRoutes.js";
+
 import { getBooksDao, getUsersDao, getLoansDao } from "../dao/daoFactory.js";
 import makeBookUseCases from "../usecases/books/makeBookUseCases.js";
 import BooksController from "../controllers/BooksController.js";
@@ -76,6 +80,10 @@ async function buildContainer() {
   // 4. Inyectamos los Controladores (y los middlewares de auth) en los Routers
   const router = Router();
   router.use("/books", createBooksRouter(booksController, auth)); // ← CAMBIÓ
+
+    // ← NUEVO: Catalog (consultas a la API externa). Usa el MISMO catalog que los libros.
+  const catalogController = new CatalogController(makeCatalogUseCases(catalog));
+  router.use("/catalog", createCatalogRouter(catalogController, auth));
 
   // Entidad Users
   const usersController = new UsersController(makeUserUseCases(usersDao, loansDao, events, hasher)); // ← CAMBIÓ

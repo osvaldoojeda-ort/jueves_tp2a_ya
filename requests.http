@@ -721,3 +721,26 @@ Content-Type: application/json
 ### B5. Detalle de un libro sin ISBN (200, externalStatus: "no_isbn", sin llamar a la red)
 GET http://localhost:8000/books/{{bookWithoutIsbn.response.body.id}}/details
 Authorization: Bearer {{adminToken}}
+
+### B6. Consultar 5 ISBN en modo SECUENCIAL (mirá httpRequests y elapsedMs)
+GET http://localhost:8000/catalog/lookup?mode=sequential&isbns=9780156012195,9780060883287,9780140328721,9780802130303,9789500700122
+Authorization: Bearer {{adminToken}}
+
+### B7. Los mismos 5 ISBN en PARALELO (mismo resultado, mucho menos tiempo)
+GET http://localhost:8000/catalog/lookup?mode=parallel&isbns=9780156012195,9780060883287,9780140328721,9780802130303,9789500700122
+Authorization: Bearer {{adminToken}}
+
+### B8. Los mismos 5 ISBN en LOTE (un solo pedido HTTP)
+GET http://localhost:8000/catalog/lookup?mode=batch&isbns=9780156012195,9780060883287,9780140328721,9780802130303,9789500700122
+Authorization: Bearer {{adminToken}}
+
+### B9. Con un ISBN que falla (solo catálogo fake): en parallel falla UNO, en batch fallan TODOS (probá con mode=batch)
+GET http://localhost:8000/catalog/lookup?mode=parallel&isbns=9780156012195,0001234567890,9780140328721
+Authorization: Bearer {{adminToken}}
+
+### B10. ISBN inválido (400 Zod: debe tener 13 dígitos)
+GET http://localhost:8000/catalog/lookup?isbns=123
+Authorization: Bearer {{adminToken}}
+
+### B11. Consultar el catálogo sin token (401)
+GET http://localhost:8000/catalog/lookup?isbns=9780156012195
