@@ -4,13 +4,14 @@ import { activosSchema } from "./loanSchema.js";
 const ROLES = ["lector", "admin"];
 
 const fields = {
-  nombre: z.string({ error: "El nombre es obligatorio" }).min(2, "El nombre debe tener al menos 2 caracteres"),
-  email: z.email({ error: "Debe ser un correo electrónico válido" }),
+  nombre: z.string({ error: "El nombre es obligatorio" }).min(2, "El nombre debe tener al menos 2 caracteres").meta({ examples: ["Ana Pérez"] }),
+  email: z.email({ error: "Debe ser un correo electrónico válido" }).meta({ examples: ["ana@mail.com"] }),
   // Reglas mínimas de contraseña; bcrypt solo procesa los primeros 72 bytes, por eso el máximo
   password: z
     .string({ error: "La contraseña es obligatoria" })
     .min(8, "La contraseña debe tener al menos 8 caracteres")
-    .max(72, "La contraseña no puede superar los 72 caracteres"),
+    .max(72, "La contraseña no puede superar los 72 caracteres")
+    .meta({ examples: ["Secreta123"] }),
   rol: z.enum(ROLES, { error: "El rol debe ser 'lector' o 'admin'" }),
 };
 

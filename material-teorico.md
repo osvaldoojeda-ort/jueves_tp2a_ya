@@ -1,1051 +1,955 @@
-# Clase 14 — Testing de casos de uso con Vitest (sin infraestructura)
+# Clase 15 — Documentación de la API con OpenAPI/Swagger, README profesional y checklist de buenas prácticas
 
 ## Objetivos de la clase
 
-- Entender **qué es un test automático**, qué problema resuelve y en qué se diferencia de probar a mano con el `.http`.
-- Ubicar los distintos **niveles de test** (unitario, integración, end-to-end) y saber por qué hoy nos quedamos con los **unitarios de casos de uso y de dominio**.
-- Diferenciar los **tests manuales** (el trabajo de QA) de los automáticos, y conocer el **ecosistema** de herramientas: no es solo Vitest y Jest (`node:test`, Mocha, Playwright...).
-- Instalar y usar **Vitest**: `describe`, `it`, `expect`, los matchers más comunes, `it.each`, `beforeEach` y el modo *watch*.
-- Escribir tests con la estructura **Arrange / Act / Assert**, con nombres que se lean como una especificación.
-- Testear **errores** (síncronos y asíncronos) verificando el `code` y el `statusCode` del `AppError`.
-- Conocer los **dobles de prueba** (dummy, stub, spy, mock, fake), cuándo usar cada uno, y `vi.fn()` / `vi.spyOn()`.
-- Mantener los tests **aislados y deterministas**: cada test arma su propio escenario, y el tiempo lo controla un reloj fijo.
-- Usar el test como **detector de acoplamiento**: si algo cuesta testearlo, el diseño está avisando algo.
-- Medir la **cobertura** sin obsesionarse con el número, y comprobar que los tests **detectan bugs** rompiendo el código a propósito.
-- Conocer las **costumbres de la vida real** (por qué los tests nunca tocan producción, tests intermitentes, CI) y cómo usar un **agente de IA** para escribir tests con **SDD** y un **harness**.
+- Entender **para quién** se documenta una API y distinguir los tres documentos de un proyecto: la **documentación de la API** (para quien la consume), el **README** (para quien la levanta) y los **comentarios** (para quien la mantiene).
+- Conocer **OpenAPI**: qué es, en qué se diferencia de "Swagger", y cómo está armado un documento (`info`, `servers`, `paths`, `components`, `security`).
+- Escribir una operación **a mano**: parámetros, cuerpo, respuestas, headers, errores con ejemplos y autenticación.
+- Comparar las formas de producir la documentación (**design-first** y **code-first**) y entender el problema central: el **desfasaje** (*drift*) entre lo que dice la documentación y lo que hace el código.
+- **Generar** la documentación a partir de los esquemas de **Zod** que ya validan los pedidos (`z.toJSONSchema`), y saber qué se pierde en la traducción.
+- Servir la documentación con **Swagger UI** (`/docs`) y el contrato crudo (`/openapi.json`), y decidir si se publica en producción.
+- Escribir **tests que mantienen viva la documentación**: que el documento sea válido, que cada ruta de Express esté documentada con el acceso correcto, y que las respuestas reales cumplan lo documentado (**tests de contrato**).
+- Escribir un **README profesional** que alguien que nunca vio el proyecto pueda seguir sin preguntarte nada.
+- Aplicar un **checklist de buenas prácticas** al proyecto integrador y corregir lo que aparezca.
 
-*(Conecta con la clase 7 y la 8: las reglas viven en casos de uso que reciben sus dependencias, y eso es lo que permite reemplazarlas en un test. Con la 10: un evento emitido se verifica con un espía. Con la 11: el hasher y el servicio de tokens se reemplazan por versiones falsas. Con la 12: el gateway externo tiene un doble sin red. Con la 13: el reloj inyectado, las funciones puras y los cuatro casos de cada regla (feliz, borde, la que la viola y "el estado no cambió") son exactamente lo que hoy automatizamos.)*
+*(Conecta con la clase 5: los verbos y status codes que hoy documentamos. Con la 6: Zod y el formato de error estandarizado, que pasan a ser parte del contrato. Con la 8 y la 9: lo que cambia según el entorno llega por parámetro, y hoy eso también vale para la documentación. Con la 11: el JWT se documenta como `securityScheme`. Con la 13: las reglas R1–R5 se le cuentan a quien consume la API. Con la 14: los tests, que hoy verifican también la documentación. Con la 16: el checklist de hoy es la guía para el simulacro de examen.)*
 
 ---
 
-## 1. la situación: ¿cómo sabemos que la biblioteca funciona?
+## 1. la situación: la API funciona, pero solo vos sabés usarla
 
-Hoy la respuesta es: **abrimos el `requests.http` y ejecutamos bloque por bloque**. En la clase 13 fueron los bloques `C1` a `C27`, más los de las clases anteriores. Para probar un préstamo vencido hubo que reiniciar el servidor con `CLOCK_NOW` en el futuro. Para probar que la API de feriados caída no impide prestar, otro reinicio con `HOLIDAYS_TYPE=fake-down`.
+La biblioteca ya tiene todo: libros, usuarios, préstamos con reglas finas, login, catálogo externo, CSV, y 118 tests que lo cuidan. Ahora alguien más la quiere usar. Puede ser una compañera que arma el **front** de la biblioteca, un equipo que hace la **app del celular**, o vos mismo dentro de seis meses. Y empiezan las preguntas por chat:
 
-Funciona, pero tiene un costo que crece clase a clase:
+> —¿Qué le mando a `POST /loans`? ¿El `userId` va siempre?
+> —¿Qué me devuelve si el socio ya tiene 3 libros? ¿Un 400? ¿Un 409? ¿Qué dice el `code`?
+> —¿El token cómo va? ¿En el body? ¿En un header?
+> —¿`fechaVencimiento` viene con hora?
+> —¿Qué pasa si la API de feriados está caída? ¿Me da error?
 
-|                                                         | Probar a mano (`.http`)              | Test automático                  |
-| ------------------------------------------------------- | -------------------------------------- | --------------------------------- |
-| ¿Cuánto tarda?                                        | Minutos (y crece con cada regla nueva) | Milisegundos                      |
-| ¿Quién verifica el resultado?                         | Una persona mirando el JSON            | El código (`expect`)           |
-| ¿Se repite después de cada cambio?                    | Casi nunca: da fiaca                   | Siempre: es un comando            |
-| ¿Prepara situaciones difíciles? (vencido, API caída) | Reiniciando con variables de entorno   | Pasando otro reloj u otro gateway |
-| ¿Deja registro de qué se probó?                      | No                                     | Sí: los tests son la lista       |
+Hoy cada respuesta está en un lugar distinto:
 
-El problema de fondo tiene nombre: **regresión**. Cambiás algo en `createLoan` para agregar una regla nueva y, sin darte cuenta, rompés una vieja. Si nadie vuelve a ejecutar los 60 bloques del `.http`, el bug llega a producción.
+| Pregunta | Dónde está la respuesta hoy |
+|---|---|
+| Qué campos acepta el body | En `schemas/loanSchema.js` (hay que saber leer Zod) |
+| Qué status y qué `code` devuelve cada error | Repartido en `usecases/loans/createLoan.js`, `middlewares/auth.js` y `validate.js` |
+| Cómo se manda el token | En `middlewares/auth.js` |
+| Qué forma tiene la respuesta | En ningún lado: hay que ejecutar el pedido y mirar |
+| Qué pasa si falla un tercero | En un comentario de `calculateDueDate.js` |
+| Un ejemplo que funcione | En `requests.http`, si sabés cuál de los 140 bloques mirar |
 
-Un test automático no reemplaza al `.http` (ese prueba la app entera, con HTTP de verdad). Lo que hace es **cuidar las reglas de negocio** cada vez que tocás el código, gratis y en un segundo.
+El costo es concreto: **cada pregunta te interrumpe a vos**, y cada respuesta que no está escrita la responde alguien **adivinando** (y su programa falla en producción cuando adivinó mal). Lo que falta es un **contrato**: un documento que diga, sin ambigüedad, qué acepta y qué devuelve cada endpoint.
 
 ---
 
-## 2. qué es un test automático
+## 2. tres documentos, tres lectores
 
-Un test es **código que ejecuta tu código y verifica el resultado**: lo llamás con datos que conocés y comparás lo que devuelve con lo que esperás. Sin ningún framework, el ejemplo más simple posible es este:
+Antes de escribir nada, conviene tener claro **quién lee qué**. Un proyecto profesional tiene tres tipos de documentación, y mezclarlos es el error más común:
+
+| Documento | Lo lee... | Responde... | En la biblioteca |
+|---|---|---|---|
+| **Documentación de la API** | Quien la **consume** (front, app, otro backend) | ¿Qué le mando? ¿Qué me devuelve? ¿Qué errores puede haber? | `GET /docs` y `GET /openapi.json` (hoy) |
+| **README** | Quien la **levanta** (alguien que clona el repo) | ¿Qué es? ¿Cómo la instalo y la corro? ¿Cómo está organizada? | `README.md` (hoy) |
+| **Comentarios y tests** | Quien la **mantiene** (vos, tu equipo) | ¿Por qué está hecho así? ¿Qué regla protege esto? | Lo que venimos escribiendo desde la clase 7 |
+
+Cada lector necesita cosas distintas. A quien consume la API **no le importa** que `createLoan` consulte los feriados después de las reglas porque es lo más caro (*fail fast*). Le importa que, si la API de feriados cae, **igual recibe un 201**, con `holidaysAvailable: false`. Y a quien mantiene el código no le sirve que el README repita los 23 endpoints: le sirve saber dónde vive cada capa.
+
+> **Regla práctica:** la documentación de la API habla del **qué** (el comportamiento observable desde afuera). Los comentarios hablan del **por qué**. El README habla del **cómo arranco**.
+
+---
+
+## 3. OpenAPI: el contrato de una API REST
+
+**OpenAPI** es un **formato estándar** para describir una API HTTP: un archivo (JSON o YAML) que lista cada endpoint con sus parámetros, sus cuerpos, sus respuestas y su forma de autenticarse. No es una librería ni un programa: es una **especificación**, como lo es JSON.
+
+Lo valioso es que, al ser un estándar, **muchas herramientas lo entienden**:
+
+| Herramienta | Qué hace con el documento OpenAPI |
+|---|---|
+| **Swagger UI**, Redoc, Scalar | Lo muestran como una página web navegable, con un botón para probar cada endpoint |
+| **Postman**, Insomnia, Bruno | Lo importan y arman la colección de pedidos completa |
+| Generadores de clientes (`openapi-generator`, `openapi-typescript`) | Escriben el código del cliente: el front llama a `api.createLoan({ bookId: 1 })` en lugar de armar el `fetch` |
+| Linters (Spectral, Redocly) | Revisan que esté bien escrito y que siga las convenciones del equipo |
+| Validadores de pedidos (`express-openapi-validator`) | Rechazan un pedido que no cumple el contrato |
+| Mocks (Prism) | Levantan un servidor falso que responde según el contrato, para que el front arranque antes que el back |
+
+### ¿Swagger u OpenAPI?
+
+Se usan como sinónimos, pero no lo son:
+
+- **Swagger** era el nombre de la especificación original (hasta la versión **2.0**, de 2014) y de un conjunto de herramientas de la empresa SmartBear.
+- En 2016 la especificación se donó a la Linux Foundation y se renombró **OpenAPI**. La **3.0** salió en 2017 y la **3.1** en 2021. La 3.1 es la que usamos hoy: su gran cambio es que los esquemas de datos son **JSON Schema** estándar, sin dialectos propios. (En 2025 salió la 3.2, que las herramientas todavía están adoptando.)
+- Hoy **"Swagger"** se refiere a las **herramientas** (Swagger UI, Swagger Editor) y **"OpenAPI"** al **formato**.
+
+Si en un trabajo te piden "el Swagger de la API", casi siempre quieren decir "el documento OpenAPI, y una página de Swagger UI para verlo". Si ves `swagger: "2.0"` en la primera línea de un archivo, es la versión vieja: cambia bastante (no hay `components`, los cuerpos se describen distinto), y conviene no mezclar ejemplos de internet de las dos versiones.
+
+---
+
+## 4. anatomía de un documento OpenAPI
+
+Así se documenta **un solo endpoint**, `GET /books/{id}`, escrito a mano en YAML:
+
+```yaml
+openapi: 3.1.0                      # versión de la ESPECIFICACIÓN (no de tu API)
+
+info:                               # qué API es
+  title: Biblioteca API
+  version: 1.0.0                    # versión de TU API (del contrato)
+  description: API REST de una biblioteca
+
+servers:                            # dónde está corriendo
+  - url: http://localhost:8000
+
+paths:                              # cada URL...
+  /books/{id}:                      # ...con la sintaxis de OpenAPI: {id}, no :id
+    get:                            # ...y cada verbo es una "operación"
+      tags: [Libros]                # para agrupar en la UI
+      operationId: getBook          # nombre único (lo usan los generadores de clientes)
+      summary: Obtener un libro
+      parameters:
+        - name: id
+          in: path                  # path | query | header | cookie
+          required: true            # en path, siempre true
+          schema:
+            type: integer
+            exclusiveMinimum: 0
+      responses:
+        "200":                      # los status van entre comillas en YAML
+          description: El libro
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Book"
+        "404":
+          description: No existe un libro con ese id
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              example:
+                error:
+                  code: BOOK_NOT_FOUND
+                  message: No existe un libro con ese id
+
+components:                         # lo reutilizable
+  schemas:
+    Book:
+      type: object
+      required: [id, titulo, autor, isbn, stock]
+      properties:
+        id: { type: integer }
+        titulo: { type: string, examples: ["El principito"] }
+        autor: { type: string }
+        isbn: { type: [string, "null"] }   # 3.1: JSON Schema estándar ("string o null")
+        stock: { type: integer, minimum: 0 }
+    ErrorResponse:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code: { type: string }
+            message: { type: string }
+```
+
+Las piezas, de arriba hacia abajo:
+
+| Parte | Para qué está |
+|---|---|
+| `openapi` | La versión de la especificación. Las herramientas la leen primero para saber cómo interpretar el resto |
+| `info` | Título, versión **de tu API**, descripción. La descripción admite Markdown |
+| `servers` | Las URL base. Swagger UI le pega a esta URL cuando apretás "Try it out" |
+| `paths` | El corazón: cada URL, cada verbo, sus parámetros, su cuerpo (`requestBody`) y sus respuestas |
+| `components` | Lo que se repite: esquemas, respuestas, parámetros y **formas de autenticarse**. Se referencia con `$ref` |
+| `security` | La autenticación por defecto de todo el documento (cada operación la puede pisar) |
+| `tags` | Grupos para ordenar las operaciones en la UI |
+
+Tres detalles que confunden al principio:
+
+- **`$ref`** es un puntero: `"#/components/schemas/Book"` significa "en este mismo documento (`#`), andá a `components` → `schemas` → `Book`". Es la forma de no repetir el esquema del libro en cada endpoint que devuelve un libro.
+- **`content` va por tipo de medio:** una misma respuesta podría ofrecer `application/json` y `text/csv`. Por eso el esquema no cuelga directo de la respuesta.
+- **YAML o JSON es lo mismo.** YAML es más cómodo para escribir a mano; JSON es lo que generan los programas. Hoy vamos a **generar JSON**.
+
+---
+
+## 5. una operación completa, a mano
+
+`GET /books/{id}` es fácil: público, un parámetro, un error. Veamos el endpoint más complejo de la biblioteca, `POST /loans`, y todo lo que quien lo consume necesita saber:
+
+```yaml
+/loans:
+  post:
+    tags: [Préstamos]
+    operationId: createLoan
+    summary: Pedir un libro prestado
+    description: |
+      Un lector pide a su nombre; el admin puede indicar `userId`.
+      - R1: como máximo 3 préstamos activos (`LOAN_LIMIT_REACHED`).
+      - R2: vence a los 10 días hábiles. Si la API de feriados no responde,
+        se presta igual y la respuesta trae `holidaysAvailable: false`.
+      - R3: con algún préstamo vencido no se puede pedir otro.
+    security:
+      - bearerAuth: []               # exige token (ver components.securitySchemes)
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [bookId]
+            properties:
+              userId: { type: integer, description: "Solo admin" }
+              bookId: { type: integer }
+          example: { bookId: 1 }
+    responses:
+      "201":
+        description: Préstamo creado
+        headers:
+          Location:                  # los headers de respuesta también se documentan
+            schema: { type: string }
+            description: URL del préstamo creado
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/Loan" }
+      "400":
+        description: Body inválido (VALIDATION_ERROR)
+        content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } } }
+      "401":
+        description: Sin token, token inválido o vencido
+        content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } } }
+      "403":
+        description: Un lector pidió a nombre de otro (FORBIDDEN)
+        content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } } }
+      "404":
+        description: USER_NOT_FOUND o BOOK_NOT_FOUND
+        content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } } }
+      "409":
+        description: Choca con una regla
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ErrorResponse" }
+            examples:                # varios ejemplos con nombre: uno por cada code posible
+              LOAN_LIMIT_REACHED:
+                value: { error: { code: LOAN_LIMIT_REACHED, message: "Un usuario puede tener hasta 3 préstamos activos" } }
+              OUT_OF_STOCK:
+                value: { error: { code: OUT_OF_STOCK, message: "No hay stock disponible de ese libro" } }
+              # ... y ALREADY_LOANED, USER_HAS_OVERDUE_LOANS
+
+components:
+  securitySchemes:
+    bearerAuth:                      # el nombre lo elegimos nosotros
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+```
+
+Fijate en lo que **sí** quedó escrito y antes había que adivinar: que `userId` es solo para el admin, que la respuesta trae un header `Location`, que un 409 puede tener **cuatro** `code` distintos (y cuál es cada uno), y que la caída de la API de feriados **no** es un error.
+
+Y fijate también en lo que **se repite**: el 401 con sus tres códigos va igual en las 19 operaciones que exigen token; el 403 va en todas las de admin; el 400 en todas las que validan algo; el cuerpo de `ErrorResponse` en cada error. Son **más de 60 líneas** para un endpoint, y tenemos 23. Escrito a mano son más de mil líneas de YAML, separadas del código, que alguien tiene que mantener al día. Ahí aparece el problema de fondo.
+
+---
+
+## 6. el enemigo: el desfasaje
+
+Imaginá que la documentación de arriba está perfecta el lunes. El martes alguien cambia el tope de préstamos para que el mensaje incluya cuántos tiene el socio. El miércoles se agrega `GET /loans/overdue`. El jueves `PUT /books/:id` pasa a ser solo para admin. Nadie toca el YAML: no se rompe nada, los tests pasan, la app anda.
+
+Un mes después, la documentación **miente** en tres lugares. Y una documentación que miente es **peor** que ninguna: sin documentación, el que consume la API pregunta; con una documentación vieja, confía, y su programa falla.
+
+Eso se llama **desfasaje** (en inglés, *drift*): la distancia entre lo que la documentación dice y lo que el código hace. No es un problema de disciplina ("hay que acordarse"). Es un problema de **diseño**: si la información está en dos lugares, en algún momento deja de coincidir. Es el mismo razonamiento que nos llevó a tener **un solo** Composition Root, o a que las reglas vivan **solo** en los casos de uso.
+
+### Las formas de producir la documentación
+
+| Enfoque | Cómo es | A favor | En contra |
+|---|---|---|---|
+| **Design-first** | Se escribe el OpenAPI **antes** que el código; se discute y se aprueba; después se programa | El contrato se acuerda entre front y back antes de escribir una línea. Ideal entre equipos | Hay que mantener el YAML y el código alineados, a mano o con validadores |
+| **Code-first, a mano** | Se programa y después se escribe el YAML aparte | Simple, sin dependencias | El que más se desfasa: nada los une |
+| **Code-first, con comentarios** (`swagger-jsdoc`) | Se escribe el YAML en un comentario arriba de cada ruta | Está cerca del código | Sigue siendo una copia: el comentario no se ejecuta, y puede decir cualquier cosa |
+| **Code-first, generado** | Se **deriva** de lo que el código ya tiene: los esquemas de validación, las rutas | Lo que se genera no se puede desfasar | Hay que agregar lo que el código no sabe (descripciones, ejemplos, errores) |
+
+**Hoy combinamos dos ideas:**
+
+1. **Generar todo lo que se pueda** de lo que ya existe: los cuerpos y parámetros salen de los mismos esquemas de **Zod** que validan los pedidos. Si mañana `createLoanSchema` cambia, la documentación cambia sola.
+2. **Testear lo que no se puede generar**: que cada ruta de Express esté documentada, que el acceso documentado (público / con token / admin) coincida con los middlewares reales, y que las respuestas reales tengan la forma documentada. Si algo se desfasa, **falla un test** (clase 14).
+
+---
+
+## 7. de Zod a OpenAPI
+
+Desde la versión 4, Zod trae **`z.toJSONSchema()`**: convierte un esquema de Zod en **JSON Schema**. Y como OpenAPI 3.1 usa JSON Schema estándar, el resultado entra directo en el documento.
 
 ```js
-// scripts/sinFramework.js — solo para entender la idea
-import assert from "node:assert";
+import { z } from "zod";
+import { createBookSchema } from "./schemas/bookSchema.js";
 
-function sumar(a, b) {
-  return a + b;
-}
-
-assert.strictEqual(sumar(2, 3), 5);     // caso normal
-assert.strictEqual(sumar(-1, 1), 0);    // con negativos
-assert.strictEqual(sumar(0, 0), 0);     // con ceros
-console.log("todo OK");
+console.log(z.toJSONSchema(createBookSchema, { io: "input" }));
 ```
-
-`assert.strictEqual(real, esperado)` no hace nada si los dos valores son iguales. Si son distintos, lanza un error. Probá cambiar el `5` por un `6` y correr `node scripts/sinFramework.js`: vas a ver un `AssertionError` que dice que esperaba 6 y recibió 5. Así se ve un test que falla.
-
-Con una función real de la biblioteca es exactamente lo mismo:
-
-```js
-import assert from "node:assert";
-import { addBusinessDays } from "../domain/businessDays.js";
-
-assert.strictEqual(addBusinessDays("2026-11-04", 10, []), "2026-11-18");
-assert.strictEqual(addBusinessDays("2026-11-04", 10, ["2026-11-09"]), "2026-11-19");
-console.log("todo OK");
-```
-
-Si una comparación falla, `assert` lanza un error y el script termina. Es un test. Lo que un **framework** agrega es todo lo demás: correr muchos archivos, ver cuál falló y por qué, agrupar, preparar el escenario antes de cada test, espiar funciones, medir cobertura, volver a correr al guardar...
-
-### Los niveles de test
-
-| Nivel                  | Qué ejercita                                                           | Velocidad           | Qué detecta                                               | Ejemplo en la biblioteca                                   |
-| ---------------------- | ----------------------------------------------------------------------- | ------------------- | ---------------------------------------------------------- | ---------------------------------------------------------- |
-| **Unitario**     | Una función o un caso de uso, con sus dependencias reemplazadas        | Milisegundos        | Errores de lógica, reglas mal escritas, bordes            | `createLoan` con DAOs en memoria y reloj fijo            |
-| **Integración** | Varias piezas reales juntas (router + caso de uso + Sequelize + SQLite) | Décimas de segundo | Que las piezas encajen: queries, status codes, middlewares | `POST /loans` con `supertest` sobre una base de prueba |
-| **End-to-end**   | La app entera desde afuera, como un usuario                             | Segundos            | Que el sistema completo funcione                           | Un script que hace login, presta y devuelve                |
-
-La forma clásica de repartirlos es la **pirámide**: muchos unitarios en la base (baratos y rápidos), algunos de integración en el medio, pocos end-to-end arriba.
-
-```mermaid
-flowchart TB
-    E2E["End-to-end<br/>pocos, lentos, frágiles"]
-    INT["Integración<br/>algunos"]
-    UNIT["Unitarios<br/>muchos, rápidos, precisos"]
-    E2E --- INT --- UNIT
-```
-
-**Hoy trabajamos en la base**: tests unitarios de **casos de uso** y de **funciones de dominio**, *sin infraestructura*: sin servidor, sin base de datos, sin red, sin `.env`.
-
-> **¿Qué es una "unidad"?** No es "un archivo" ni "una función". Es **un comportamiento** que tiene sentido por sí mismo: "prestar un libro", "calcular un vencimiento". El test de `createLoan` usa de verdad `addBusinessDays`, `isOverdue` y el DAO en memoria, y sigue siendo unitario: lo que reemplazamos es lo **lento o incontrolable** (la base, la red, la hora), no cada función que se llama.
-
-### Y los tests manuales: el trabajo de QA
-
-Que hoy automaticemos no significa que los tests manuales sean "de segunda". En la mayoría de los equipos hay personas de **QA** (*Quality Assurance*, aseguramiento de la calidad) cuyo trabajo es justamente probar el sistema, y buena parte de ese trabajo es manual **a propósito**.
-
-Lo que venimos haciendo con el `requests.http` ya es testing manual: cada bloque (`C12. Prestar un cuarto libro → 409 LOAN_LIMIT_REACHED`) es un **caso de prueba** con pasos y un resultado esperado, y el archivo entero es un **plan de pruebas**. Un QA hace lo mismo, de forma más sistemática:
-
-| Tipo de prueba manual              | Qué es                                                          | Ejemplo en la biblioteca                                                                                  |
-| ---------------------------------- | ---------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
-| **Casos de prueba** escritos | Pasos + datos + resultado esperado, que cualquiera puede repetir | "Con 3 préstamos activos, prestar un cuarto → 409 y el stock no cambia"                                 |
-| **Exploratoria**             | Probar sin guion, buscando lo que nadie pensó                   | ¿Qué pasa si pido un libro con `bookId: "1"` (texto)? ¿Y con 10 pedidos seguidos con el mismo token? |
-| **Regresión**               | Repetir lo que ya andaba antes de cada versión                  | Volver a correr el plan completo antes de publicar                                                        |
-| **Smoke**                    | Un chequeo rápido de que "lo básico respira"                   | Después de un deploy: login, listar libros, prestar uno                                                  |
-| **Aceptación (UAT)**        | El cliente o el usuario confirma que es lo que pidió            | La bibliotecaria prueba el circuito de renovación y dice si le sirve                                     |
-| **Usabilidad**               | ¿Se entiende? ¿Los mensajes ayudan?                            | ¿El mensaje de `LOAN_LIMIT_REACHED` le dice al socio qué hacer?                                       |
-
-Y cuando un QA encuentra un problema, no dice "no anda": escribe un **reporte de bug** con pasos para reproducirlo, resultado esperado, resultado obtenido, entorno (versión, `PERSISTENCE_TYPE`, fecha del reloj) y evidencia (la respuesta, una captura). Un buen reporte de bug es, en el fondo, un test que todavía no se automatizó (ver sección 15.5).
-
-#### Herramientas que vas a ver en un equipo de QA
-
-| Para qué                            | Herramientas                                                                                                                 |
-| ------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------- |
-| Probar APIs a mano                   | **Postman**, Insomnia, Bruno, Hoppscotch, y el **REST Client** de VSCode que ya usamos (`.http`)               |
-| Gestionar casos y planes de prueba   | TestRail, Xray y Zephyr (integrados con Jira), Qase                                                                          |
-| Reportar y seguir bugs               | Jira, GitHub Issues, Linear                                                                                                  |
-| Automatizar lo que se probaba a mano | Colecciones de Postman corridas con **Newman**; **Playwright**, **Cypress** o Selenium para interfaces web |
-| Carga y rendimiento                  | k6, JMeter, Artillery                                                                                                        |
-| Seguridad                            | OWASP ZAP, Burp Suite                                                                                                        |
-
-Dentro de QA suele haber dos perfiles: **QA manual** (diseña casos, explora, valida con el negocio) y **QA automation** o **SDET** (programa tests automáticos, muchas veces end-to-end con Playwright o Cypress).
-
-#### ¿Manual o automático?
-
-No compiten: se reparten el trabajo.
-
-| Conviene automatizar                                   | Conviene hacerlo a mano                                     |
-| ------------------------------------------------------ | ----------------------------------------------------------- |
-| Lo que se repite en cada cambio (regresión)           | Lo que se prueba una sola vez                               |
-| Reglas con muchos casos y bordes (R1–R4)              | Funcionalidades nuevas que todavía cambian todos los días |
-| Lo que necesita "viajar en el tiempo" o simular fallas | Exploración: buscar lo que nadie anticipó                 |
-| Lo que tiene que correr en segundos antes de mergear   | Usabilidad, textos, "¿esto tiene sentido para el usuario?" |
-
-Una regla práctica: **si te encontrás repitiendo el mismo bloque del `.http` por tercera vez, es candidato a test automático.** Y al revés: los mejores casos para automatizar muchas veces salen de lo que un QA encontró explorando a mano.
-
----
-
-## 3. la cosecha: el proyecto ya estaba listo para testearse
-
-Durante 13 clases fuimos tomando decisiones de diseño "porque está bien separar". Hoy se ve **para qué servían**: cada dependencia que se inyecta es una dependencia que en el test se puede reemplazar.
-
-| Clase | Decisión                                                       | En el test, eso permite...                                                      |
-| ----- | --------------------------------------------------------------- | ------------------------------------------------------------------------------- |
-| 7     | Las reglas viven en **casos de uso**, no en el controller | Probar las reglas sin Express, sin `req` ni `res`                           |
-| 8     | El caso de uso recibe el **DAO por parámetro** (factory) | Pasarle un DAO en memoria nuevo en cada test                                    |
-| 9     | Dos adaptadores con la **misma interfaz**                 | El DAO en memoria es un sustituto legítimo del de Sequelize                    |
-| 10    | Los efectos secundarios salen por un **bus de eventos**   | Verificar "se emitió `book.lowStock`" con un espía, sin mandar ningún mail |
-| 11    | `hasher` y `tokens` son **contratos inyectados**      | Reemplazar bcrypt (lento) y JWT (necesita secreto) por versiones triviales      |
-| 12    | La API externa está detrás de un **gateway**            | Un catálogo/feriados falso: sin red, sin demoras, con fallas a pedido          |
-| 13    | **Reloj inyectado** y **funciones puras**           | Fijar "hoy" en cualquier fecha; probar el calendario con una tabla de casos     |
-
-Si `createLoan` hiciera `new Date()`, `import sequelize` y `fetch("https://api.argentinadatos.com/...")` por su cuenta, testearlo exigiría una base, internet y esperar a que algo venza. **Testeabilidad es un efecto de la arquitectura, no algo que se agrega al final.**
-
----
-
-## 4. Vitest: instalación y primer test
-
-### No hay una sola herramienta: el ecosistema de testing
-
-Vitest y Jest son los más usados en JavaScript, pero no son los únicos. Para comparar herramientas, primero conviene saber qué **piezas** tiene cualquier herramienta de testing, porque algunas traen todo y otras solo una parte:
-
-| Pieza                             | Qué hace                                                            | Ejemplos                                                                              |
-| --------------------------------- | -------------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
-| **Test runner** (ejecutor)  | Encuentra los archivos de test, los corre y muestra el reporte       | `vitest`, `jest`, `node --test`, `mocha`                                      |
-| **Librería de aserciones** | Las funciones para comparar (`expect(...).toBe`, `assert.equal`) | `expect` de Vitest/Jest, `node:assert`, Chai                                      |
-| **Dobles de prueba**        | Espías, stubs, mocks                                                | `vi.fn()`, `jest.fn()`, `mock.fn()` de Node, Sinon                              |
-| **Cobertura**               | Medir qué líneas se ejecutaron                                     | `@vitest/coverage-v8`, `--experimental-test-coverage` de Node, c8, Istanbul / nyc |
-
-Vitest y Jest traen **las cuatro piezas** en un solo paquete. Otras herramientas son más "armá tu combo":
-
-| Herramienta                                        | Qué es                                                                                                                                                                  | Cuándo la vas a ver                                                  |
-| -------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------- |
-| **Jest**                                     | El estándar de facto durante años. Creado en Meta, hoy está en la OpenJS Foundation                                                                                   | Muchísimos proyectos existentes, React y React Native                |
-| **Vitest**                                   | Del equipo de Vite, misma API que Jest, rápido y con soporte nativo de ESM y TypeScript. Detrás de Vite y Vitest hoy hay una empresa (VoidZero) dedicada a mantenerlos | Proyectos nuevos, proyectos con Vite                                  |
-| **`node:test`**                            | El test runner **incluido en Node** (estable desde Node 20): no se instala nada                                                                                    | Librerías y proyectos que no quieren dependencias                    |
-| **Mocha** + **Chai** + **Sinon** | Runner + aserciones + dobles, cada uno por separado                                                                                                                      | Proyectos Node más antiguos; muy común en backends                  |
-| **Jasmine**, **AVA**, **tap**    | Otros runners con su propia filosofía                                                                                                                                   | Menos frecuentes hoy                                                  |
-| **Bun test**, **Deno test**            | Los runners que traen esos entornos alternativos a Node                                                                                                                  | Si el proyecto corre en Bun o Deno                                    |
-| **supertest**                                | No es un runner: hace pedidos HTTP a una app de Express sin levantar el servidor                                                                                         | Tests de integración de APIs (junto con cualquiera de los de arriba) |
-| **Playwright**, **Cypress**, Selenium  | Manejan un navegador real                                                                                                                                                | Tests end-to-end de interfaces web                                    |
-
-Y fuera de JavaScript las ideas son **las mismas** con otros nombres: JUnit (Java), pytest (Python), xUnit (C#), PHPUnit (PHP), `go test` (Go). Si entendés Arrange / Act / Assert, los dobles de prueba y el aislamiento, cambiar de herramienta es cuestión de leer la documentación una tarde.
-
-#### Así se vería el primer test con la herramienta de Node
-
-Sin instalar nada:
-
-```js
-// tests/utils/isbn.node.test.js
-import { describe, it, mock } from "node:test";
-import assert from "node:assert/strict";
-import { hasValidIsbn13Checksum } from "../../utils/isbn.js";
-
-describe("hasValidIsbn13Checksum (con node:test)", () => {
-  it("acepta el ISBN de El principito", () => {
-    assert.equal(hasValidIsbn13Checksum("9780156012195"), true);
-  });
-
-  it("también tiene espías: mock.fn()", () => {
-    const emit = mock.fn();
-    emit("book.lowStock", { id: 1 });
-    assert.equal(emit.mock.callCount(), 1);
-  });
-});
-```
-
-```bash
-node --test                                  # busca y corre los archivos *.test.js
-node --test --experimental-test-coverage     # con cobertura
-```
-
-`describe` e `it` son iguales. Cambian las aserciones (`assert.equal` en lugar de `expect(...).toBe`) y algunos detalles: no hay `it.each`, y `toMatchObject` o `rejects.toMatchObject` se escriben con `assert.partialDeepStrictEqual` y `assert.rejects`, que son menos cómodos.
-
-### ¿Por qué Vitest, entonces?
-
-- La API es la **misma que la de Jest**: lo que aprendas hoy te sirve en la mayoría de los proyectos que vas a encontrar.
-- El proyecto usa **módulos ES** (`"type": "module"`, `import`/`export`). Vitest los entiende sin configuración; Jest necesita un flag experimental de Node (`--experimental-vm-modules`) o transpilar con Babel.
-- Trae `it.each`, `toMatchObject`, `rejects`, el modo *watch* y la cobertura con un reporte HTML listos para usar, que hacen los tests más fáciles de leer que con `node:test`.
-
-`node:test` sería una opción perfectamente válida para un proyecto que no quiere dependencias. Lo importante no es la herramienta: es lo que viene en el resto de la clase.
-
-### Instalación
-
-```bash
-npm install -D vitest @vitest/coverage-v8
-```
-
-El `-D` los guarda en `devDependencies`: son herramientas para **desarrollar**, no hacen falta para que la API funcione en producción.
 
 ```json
-// package.json
-"scripts": {
-  "start": "node --env-file=.env index.js",
-  "dev": "node --env-file=.env --watch index.js",
-  "test": "vitest run",
-  "test:watch": "vitest",
-  "coverage": "vitest run --coverage"
-}
-```
-
-- `npm test` corre todo una vez (lo que usaría un servidor de integración continua).
-- `npm run test:watch` se queda mirando: al guardar un archivo, vuelve a correr **solo los tests afectados**. Es el modo para trabajar.
-- `npx vitest run tests/domain` corre solo una carpeta; `npx vitest run -t "R1"` solo los tests cuyo nombre contiene "R1".
-
-```js
-// vitest.config.js
-import { defineConfig } from "vitest/config";
-
-export default defineConfig({
-  test: {
-    include: ["tests/**/*.test.js"], // dónde buscar tests
-    environment: "node",
-    restoreMocks: true,              // deshace los vi.spyOn después de cada test
-    coverage: {
-      provider: "v8",
-      include: ["domain/**", "usecases/**", "utils/**"],
-      reporter: ["text", "html"],
-    },
+{
+  "type": "object",
+  "properties": {
+    "titulo": { "type": "string", "minLength": 1 },
+    "autor":  { "type": "string", "minLength": 1 },
+    "isbn":   { "type": "string", "pattern": "^\\d{13}$" },
+    "stock":  { "default": 0, "type": "integer", "minimum": 0 }
   },
-});
-```
-
-### Dónde van los tests
-
-Usamos una carpeta `tests/` que **copia la estructura** del proyecto. Así, para encontrar el test de `usecases/loans/createLoan.js` se busca `tests/usecases/loans/createLoan.test.js`:
-
-```
-tests/
-├── helpers/loanScenario.js        ← armado de escenarios (no es un test: no termina en .test.js)
-├── domain/businessDays.test.js
-├── domain/loanStatus.test.js
-├── utils/isbn.test.js
-└── usecases/loans/createLoan.test.js
-```
-
-*(La otra convención común es dejar `createLoan.test.js` al lado de `createLoan.js`. Las dos son válidas: lo importante es elegir una y mantenerla.)*
-
-### El primer test
-
-```js
-// tests/utils/isbn.test.js
-import { describe, it, expect } from "vitest";
-import { hasValidIsbn13Checksum } from "../../utils/isbn.js";
-
-describe("hasValidIsbn13Checksum", () => {
-  it("acepta el ISBN de El principito", () => {
-    expect(hasValidIsbn13Checksum("9780156012195")).toBe(true);
-  });
-
-  it("rechaza el mismo ISBN con el último dígito cambiado", () => {
-    expect(hasValidIsbn13Checksum("9780156012196")).toBe(false);
-  });
-});
-```
-
-- `describe(nombre, fn)` **agrupa** tests relacionados (se pueden anidar).
-- `it(nombre, fn)` es **un test** (`test(...)` es un alias, son lo mismo).
-- `expect(valor)` envuelve el resultado real, y el **matcher** (`.toBe(...)`) lo compara con lo esperado.
-
-```
- ✓ tests/utils/isbn.test.js (2 tests) 3ms
-
- Test Files  1 passed (1)
-      Tests  2 passed (2)
-```
-
-Y cuando algo falla, Vitest muestra **qué esperaba y qué recibió**:
-
-```
- FAIL  tests/utils/isbn.test.js > hasValidIsbn13Checksum > acepta el ISBN de El principito
-AssertionError: expected false to be true
-
-- Expected: true
-+ Received: false
-```
-
----
-
-## 5. anatomía de un buen test
-
-### Arrange / Act / Assert
-
-Todo test tiene tres partes, y conviene que se **vean** (con una línea en blanco entre ellas):
-
-```js
-it("presta el libro, calcula el vencimiento en días hábiles y descuenta stock", async () => {
-  // Arrange: preparar el escenario
-  const { useCases, stockOf } = buildLoanScenario(); // hoy = miércoles 2026-11-04
-
-  // Act: ejecutar UNA acción, la que se está probando
-  const loan = await useCases.createLoan({ bookId: 1 }, ANA);
-
-  // Assert: verificar el resultado
-  expect(loan).toMatchObject({ fechaVencimiento: "2026-11-19", estado: "activo", holidaysAvailable: true });
-  expect(await stockOf(1)).toBe(4);
-});
-```
-
-Si el *Act* tiene muchas acciones, probablemente son **varios tests**. Si el *Arrange* es enorme, probablemente falta un **helper** (sección 10).
-
-### El nombre es la especificación
-
-Leé solo los nombres de un archivo de test:
-
-```
-createLoan
-  R1 — como máximo 3 préstamos activos
-    ✓ borde: con 2 activos, el tercero se presta
-    ✓ con 3 activos, el cuarto se rechaza con 409 LOAN_LIMIT_REACHED y el mensaje dice el límite
-    ✓ tras el rechazo, el estado no cambió: ni stock ni préstamos
-    ✓ los préstamos devueltos no cuentan para el límite
-```
-
-Eso **es la documentación de la regla**, y a diferencia de un comentario, no puede quedar desactualizada: si la regla cambia, el test falla. Un nombre como `it("test 1")` o `it("funciona")` no dice qué se rompió cuando falla.
-
-Regla práctica: el nombre dice **la situación y el resultado esperado**. "Con 3 activos → rechaza con LOAN_LIMIT_REACHED".
-
-### Las propiedades de un buen test unitario
-
-| Propiedad                          | Qué significa                                   | Qué lo rompe en nuestro proyecto                    |
-| ---------------------------------- | ------------------------------------------------ | ---------------------------------------------------- |
-| **Rápido**                  | Milisegundos                                     | Usar bcrypt real, la red, una base en disco          |
-| **Independiente**            | No depende de otro test ni del orden             | Compartir el DAO entre tests (sección 10)           |
-| **Repetible / determinista** | Mismo resultado hoy, mañana y en otra máquina  | `new Date()`, la red, `Math.random()`            |
-| **Auto-verificable**         | Pasa o falla solo, sin que nadie mire la consola | Un `console.log(result)` en lugar de un `expect` |
-| **Oportuno**                 | Se escribe junto con el código, no "al final"   | "Después lo testeo"                                 |
-
----
-
-## 6. los matchers que más vamos a usar
-
-| Matcher                           | Para qué                                                          | Ejemplo                                                                                 |
-| --------------------------------- | ------------------------------------------------------------------ | --------------------------------------------------------------------------------------- |
-| `toBe(x)`                       | Igualdad **estricta** (`===`): números, textos, booleanos | `expect(stock).toBe(4)`                                                               |
-| `toEqual(obj)`                  | Igualdad **de contenido**, recursiva: objetos y arreglos     | `expect(result).toEqual({ fechaVencimiento: "2026-11-19", holidaysAvailable: true })` |
-| `toMatchObject(obj)`            | Que **contenga** esos campos (ignora el resto)               | `expect(loan).toMatchObject({ estado: "activo" })`                                    |
-| `toBeNull()`, `toBeDefined()` | `null` / no `undefined`                                        | `expect(withStatus(null, hoy)).toBeNull()`                                            |
-| `toHaveLength(n)`               | Largo de un arreglo o texto                                        | `expect(prestamos).toHaveLength(3)`                                                   |
-| `toContain(x)`                  | Que un arreglo contenga un elemento                                | `expect(codes).toContain("FORBIDDEN")`                                                |
-| `toHaveProperty(k)`             | Que un objeto tenga una propiedad                                  | `expect(user).not.toHaveProperty("passwordHash")`                                     |
-| `toThrow(...)`                  | Que una función **síncrona** lance                         | `expect(() => createClock({ fixedNow: "x" })).toThrow()`                              |
-| `resolves` / `rejects`        | Que una **promesa** se cumpla / se rechace                   | `await expect(p).rejects.toMatchObject({ code: "..." })`                              |
-| `toHaveBeenCalled...`           | Cómo se llamó un **espía** (sección 9)                   | `expect(listener).toHaveBeenCalledWith({...})`                                        |
-| `expect.stringContaining(s)`    | Comodín dentro de un objeto                                       | `{ message: expect.stringContaining("3") }`                                           |
-
-Cualquier matcher se niega con `.not`: `expect(spy).not.toHaveBeenCalled()`.
-
-### La trampa de `toBe` con objetos
-
-```js
-expect({ a: 1 }).toBe({ a: 1 });    // ✗ FALLA: son dos objetos distintos en memoria
-expect({ a: 1 }).toEqual({ a: 1 }); // ✓ pasa: tienen el mismo contenido
-```
-
-`toBe` compara **identidad** (¿es el mismo objeto?), `toEqual` compara **contenido**. Para objetos y arreglos casi siempre querés `toEqual` o `toMatchObject`.
-
-### `toEqual` vs `toMatchObject`: cuánto afirmar
-
-`toEqual` exige que el objeto sea **exactamente** ese; `toMatchObject` solo que **incluya** esos campos. El préstamo que devuelve `createLoan` trae `id`, `fechaPrestamo`, `usuario`, `libro`, `renovaciones`... Si el test de R2 usara `toEqual`, fallaría cada vez que agreguemos un campo a la respuesta, aunque el vencimiento siga bien calculado. Un test que se rompe por cambios que no le importan es un **test frágil**.
-
-> Afirmá **lo que el test promete en su nombre**, y nada más.
-
----
-
-## 7. funciones puras: tablas de casos con `it.each`
-
-Las funciones de `domain/` son el caso más fácil del mundo: entra un dato, sale un resultado, sin dependencias. Para probar muchas combinaciones sin copiar y pegar el mismo test, `it.each` recibe una **tabla**:
-
-```js
-it.each([
-  // [desde, días, feriados, esperado, descripción]
-  ["2026-11-06", 1, [], "2026-11-09", "de viernes a lunes"],
-  ["2026-11-07", 1, [], "2026-11-09", "empezando un sábado"],
-  ["2026-11-06", 1, ["2026-11-09"], "2026-11-10", "fin de semana largo"],
-  ["2026-11-04", 0, [], "2026-11-04", "cero días no mueve la fecha"],
-  ["2026-12-20", 10, ["2026-12-25", "2027-01-01"], "2027-01-05", "cruzando el fin de año"],
-  ["2028-02-25", 3, [], "2028-03-01", "cruzando un 29 de febrero"],
-])("desde %s + %i días hábiles (feriados %j) → %s (%s)", (desde, dias, feriados, esperado) => {
-  expect(addBusinessDays(desde, dias, feriados)).toBe(esperado);
-});
-```
-
-Cada fila aparece en el reporte como un test aparte, con los `%s` / `%i` / `%j` reemplazados por los valores. Si falla "cruzando un 29 de febrero", lo sabés sin abrir el archivo.
-
-### ¿Qué filas poner? Los bordes
-
-Los bugs no viven en el medio de los datos, viven en los **bordes**. Para cada función, preguntate:
-
-- ¿Qué pasa con **cero**, con **uno**, con **el máximo**? (0 días hábiles; 1 préstamo; el préstamo número 3)
-- ¿Qué pasa **justo en el límite** y **uno antes / uno después**? (vence hoy / vencía ayer / vence mañana)
-- ¿Qué pasa al **cruzar** algo? (fin de semana, fin de mes, fin de año, año bisiesto, medianoche en otra zona horaria)
-- ¿Qué pasa con lo **vacío**? (lista sin feriados, CSV sin filas, `null`)
-
-El borde más importante de la clase 13 es el de R3:
-
-```js
-it("el MISMO día del vencimiento todavía no está vencido", () => {
-  expect(isOverdue({ fechaVencimiento: "2026-11-18", fechaDevolucion: null }, "2026-11-18")).toBe(false);
-});
-```
-
-Si alguien escribe `<=` en lugar de `<` dentro de `isOverdue`, todos los casos "normales" siguen andando. **Solo este test lo detecta.**
-
----
-
-## 8. testear errores
-
-Nuestros casos de uso comunican los rechazos lanzando un `AppError` con `code`, `message` y `statusCode`. Testear el camino de error es tan importante como el feliz: es donde viven las reglas.
-
-### Errores síncronos: se pasa una función
-
-```js
-expect(() => createClock({ fixedNow: "mañana" })).toThrow(/no es una fecha válida/);
-```
-
-Ojo con la flechita: si escribís `expect(createClock({ fixedNow: "mañana" }))`, el error se lanza **antes** de llegar a `expect` y el test explota en vez de verificar. `expect` necesita una función para poder llamarla él, dentro de un `try`.
-
-### Errores asíncronos: `await expect(...).rejects`
-
-Los casos de uso son `async`: no **lanzan**, devuelven una **promesa rechazada**. Se verifica así:
-
-```js
-it("libro inexistente → 404 BOOK_NOT_FOUND", async () => {
-  const { useCases } = buildLoanScenario();
-
-  await expect(useCases.createLoan({ bookId: 999 }, ANA)).rejects.toMatchObject({
-    code: "BOOK_NOT_FOUND",
-    statusCode: 404,
-  });
-});
-```
-
-### La trampa: olvidarse el `await`
-
-```js
-it("libro inexistente → 404", async () => {
-  expect(useCases.createLoan({ bookId: 999 }, ANA)).rejects.toMatchObject({ code: "OTRA_COSA" }); // sin await
-});
-// ✓ PASA (¡aunque el code está mal!)
-```
-
-Sin el `await`, el test termina **antes** de que la promesa se resuelva, y un test que termina sin errores se cuenta como aprobado. Es el error más común al testear código asíncrono: el test está en verde y no verifica nada. (Vitest a veces avisa con un warning, pero no hay que depender de eso.) Una buena costumbre para detectarlo: **hacé fallar el test a propósito** la primera vez (cambiá el `code` esperado) y comprobá que se pone en rojo.
-
-### ¿Verificar el `code` o el `message`?
-
-El **`code` es el contrato**: el frontend decide qué hacer según `LOAN_LIMIT_REACHED`. El **mensaje es para humanos**: lo puede reescribir alguien de UX mañana, con tildes distintas, y no tendría que romper ningún test. Por eso verificamos `code` y `statusCode`, y el mensaje solo cuando **lleva un dato** que forma parte de la regla:
-
-```js
-await expect(useCases.createLoan({ bookId: 4 }, ANA)).rejects.toMatchObject({
-  code: "LOAN_LIMIT_REACHED",
-  statusCode: 409,
-  message: expect.stringContaining("3"), // la clase 13 pidió que el mensaje diga cuál es el límite
-});
-```
-
-### "Y el estado no cambió"
-
-Un rechazo que **igual modificó algo** es un bug grave (descontó stock pero no creó el préstamo, por ejemplo). Por eso, después de verificar el error, se verifica que todo quedó como estaba:
-
-```js
-it("tras el rechazo, el estado no cambió: ni stock ni préstamos", async () => {
-  const { useCases, loansDao, stockOf } = buildLoanScenario();
-  for (const bookId of [1, 2, 3]) await useCases.createLoan({ bookId }, ANA);
-
-  await useCases.createLoan({ bookId: 4 }, ANA).catch(() => {}); // sabemos que falla: miramos lo que dejó
-
-  expect(await stockOf(4)).toBe(5);
-  expect(await loansDao.getAll({ userId: ANA.id, activos: true })).toHaveLength(3);
-});
-```
-
----
-
-## 9. dobles de prueba
-
-Un **doble de prueba** (*test double*, como el doble de riesgo en una película) es cualquier objeto que **reemplaza a una dependencia real** durante un test. Hay varios tipos, y los nombres aparecen en cualquier equipo, así que vale la pena conocerlos:
-
-| Tipo            | Qué es                                                           | En nuestro proyecto                                                                                            |
-| --------------- | ----------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
-| **Dummy** | Se pasa para completar la firma; nunca se usa                     | `vi.fn()` como `createBook` en un test donde ningún ISBN se encuentra                                     |
-| **Stub**  | Devuelve respuestas **preparadas**                          | Un `holidays` que siempre devuelve `["2026-11-09"]`; un `tokens.sign` que devuelve `"token-de-prueba"` |
-| **Spy**   | Registra **cómo lo llamaron** (con qué, cuántas veces)   | `events.emit = vi.fn()` para verificar que se emitió `book.lowStock`                                      |
-| **Mock**  | Un espía con **expectativas** sobre cómo debe ser llamado | `expect(tokens.sign).toHaveBeenCalledWith({ sub: "7", rol: "lector" })`                                      |
-| **Fake**  | Una **implementación de verdad, pero simplificada**        | `BooksMemoryDao`, `LoansMemoryDao`, `createFakeHolidays()`, el reloj fijo                                |
-
-*(En la práctica la gente dice "mock" para todo. No pasa nada, pero entender la diferencia ayuda a elegir.)*
-
-### `vi.fn()`: una función espía
-
-```js
-import { vi } from "vitest";
-
-const listener = vi.fn();                     // no hace nada, solo registra
-const sign = vi.fn(() => "token-de-prueba");  // stub + spy: devuelve algo y registra
-const getHolidays = vi.fn().mockResolvedValue(["2026-11-09"]);                  // promesa cumplida
-const roto = vi.fn().mockRejectedValue(new AppError("EXTERNAL_TIMEOUT", "...", 504)); // promesa rechazada
-
-// Después del Act:
-expect(listener).toHaveBeenCalledOnce();
-expect(listener).toHaveBeenCalledWith({ id: 1, titulo: "Libro 1", stock: 4 });
-expect(getHolidays).toHaveBeenCalledTimes(2);
-expect(sign).not.toHaveBeenCalled();
-```
-
-### `vi.spyOn()`: espiar un método que ya existe
-
-```js
-const spy = vi.spyOn(holidays, "getHolidays");          // sigue funcionando igual, pero registra
-vi.spyOn(console, "warn").mockImplementation(() => {}); // lo reemplaza: silencia la consola en el test
-```
-
-Con `restoreMocks: true` en la configuración, todos los `spyOn` se deshacen solos al terminar cada test.
-
-### Ejemplo: el login sin bcrypt ni JWT
-
-`loginUser` depende de bcrypt (lento **a propósito**: cada hash tarda ~100 ms) y de jsonwebtoken (necesita `JWT_SECRET`). Ninguno de los dos es lo que queremos probar. Como los dos llegan inyectados con un contrato mínimo, los reemplazamos por versiones triviales:
-
-```js
-const hasher = {
-  hash: vi.fn(async (plain) => `hash:${plain}`),
-  compare: vi.fn(async (plain, hash) => hash === `hash:${plain}`),
-};
-const tokens = { sign: vi.fn(() => "token-de-prueba") };
-```
-
-Y así se puede probar la regla de seguridad de la clase 11, que con el `.http` era imposible de verificar:
-
-```js
-it("aunque el email no exista, igual compara contra el hash falso (para no delatarse por el tiempo)", async () => {
-  await loginUser({ email: "nadie@test.com", password: "otra" }, dao, hasher, tokens, dummyHash).catch(() => {});
-
-  expect(hasher.compare).toHaveBeenCalledWith("otra", "hash:dummy");
-});
-```
-
-### ¿Fake o spy? Preferí verificar el resultado
-
-Hay dos formas de verificar algo:
-
-- **Por estado / resultado:** "después de prestar, el stock es 4".
-- **Por interacción:** "se llamó a `booksDao.adjustStock(1, -1)`".
-
-La segunda **ata el test a la implementación**: si mañana el DAO descuenta el stock de otra forma, el test se rompe aunque el comportamiento sea idéntico. Por eso, para los DAOs usamos **fakes** (el DAO en memoria) y verificamos el estado.
-
-Los espías los reservamos para cuando **la interacción ES el comportamiento**:
-
-- "Se emitió `book.lowStock`" (el efecto es justamente avisar).
-- "**No** se consultó la API de feriados si una regla rechazó el pedido" (fail fast: es una regla de la clase 13).
-- "Se firmó el token con `sub` y `rol`, y nada más" (qué va en el payload es una decisión de seguridad).
-
-### ¿Y `vi.mock()`?
-
-Vitest puede reemplazar **un módulo entero** (`vi.mock("../../config/config.js", ...)`) para que un `import` devuelva otra cosa. Es una herramienta potente para código que **no** recibe sus dependencias por parámetro. Nosotros casi nunca la necesitamos: como inyectamos todo, alcanza con pasar otra cosa. Si te encontrás usando `vi.mock` para testear un caso de uso, preguntate primero si no conviene inyectar esa dependencia (sección 12).
-
----
-
-## 10. aislamiento: cada test arma su propio mundo
-
-### El problema del estado compartido
-
-Mirá el final de `BooksMemoryDao.js`:
-
-```js
-export { BooksMemoryDao };
-export default new BooksMemoryDao(); // UNA instancia para todo el proceso
-```
-
-Si dos tests usan esa instancia, comparten el estado:
-
-```js
-it("presta el libro 2", async () => { /* stock del libro 2: 1 → 0 */ });
-it("presta el libro 2 a otra persona", async () => { /* ✗ OUT_OF_STOCK: el test anterior se lo llevó */ });
-```
-
-El segundo test pasa o falla **según qué test corrió antes**. Y peor: si lo corrés solo (`-t "otra persona"`), pasa. Son los bugs más frustrantes de una suite de tests. La regla es simple: **ningún test depende de otro**. Cada uno prepara todo lo que necesita.
-
-Por eso, en los tests **instanciamos la clase** (`new BooksMemoryDao(...)`) en lugar de importar el `default`. Ese `export { BooksMemoryDao }` estaba en el código desde la clase 8 con el comentario *"por si se requiere instanciar nuevamente (ej: en tests)"*. Hoy es ese día.
-
-Hay una segunda trampa más sutil: `BooksMemoryDao` guarda **los mismos objetos** que le pasás y les modifica el `stock`. Si los libros de prueba son una constante compartida, el primer préstamo modifica la constante. Por eso el helper los **copia** antes de pasarlos: `books.map((b) => ({ ...b }))`.
-
-### `beforeEach`: preparar antes de cada test
-
-Para archivos simples, `beforeEach` corre antes de **cada** `it` y deja todo limpio:
-
-```js
-let dao;
-let events;
-
-beforeEach(() => {
-  dao = new BooksMemoryDao([{ id: 1, titulo: "El principito", autor: "Saint-Exupéry", isbn: "9780156012195", stock: 3 }]);
-  events = { emit: vi.fn() };
-});
-```
-
-(También existen `afterEach`, `beforeAll` y `afterAll`. `beforeAll` corre **una vez** por archivo: sirve para cosas caras y de solo lectura, y es justo lo que **no** queremos para datos que los tests modifican.)
-
-### Un helper de escenarios
-
-`createLoan` necesita **ocho** dependencias. Armarlas en cada test sería ruido que tapa lo importante. Un **helper** (o *builder*) arma el mundo completo con valores por defecto razonables, y cada test cambia **solo lo que le importa**:
-
-```js
-// tests/helpers/loanScenario.js (resumen)
-export function buildLoanScenario({
-  now = "2026-11-04T12:00:00-03:00",
-  loanRules = {},
-  holidays = createFakeHolidays(),
-  lowStockThreshold = 0,
-} = {}) {
-  const booksDao = new BooksMemoryDao(BOOKS.map((b) => ({ ...b })));
-  const usersDao = new UsersMemoryDao(USERS.map((u) => ({ ...u })));
-  const loansDao = new LoansMemoryDao(booksDao, usersDao);
-  const events = createEventBus();
-  const clock = createClock({ fixedNow: now });
-  const rules = { maxActive: 3, businessDays: 10, maxRenewals: 1, ...loanRules };
-
-  const useCases = makeLoanUseCases({ loansDao, booksDao, usersDao, events, clock, holidays, loanRules: rules, lowStockThreshold });
-  return { useCases, loansDao, booksDao, events, clock, holidays, givenLoan, stockOf };
+  "required": ["titulo", "autor"]
 }
 ```
 
-Fijate que el test usa **la misma factory que el Composition Root** (`makeLoanUseCases`). El helper es, en el fondo, un `container.js` para tests: mismas piezas, distintas implementaciones.
+### `io: "input"` vs `io: "output"`
 
-Y así se lee un test que necesita algo distinto:
+Un esquema de Zod describe **dos** formas: lo que **entra** (antes de los `default` y los `transform`) y lo que **sale** (después). En `createBookSchema`, `stock` tiene `.default(0)`:
+
+| | `stock` | ¿Por qué? |
+|---|---|---|
+| `io: "input"` | **opcional** | El cliente puede no mandarlo |
+| `io: "output"` | **obligatorio** | Después de parsear, siempre está (vale 0) |
+
+Para documentar un **pedido**, lo que importa es lo que el cliente **manda**: `io: "input"`. Si usaras `"output"`, la documentación diría que `stock` es obligatorio y le harías mandar algo que no hace falta. Con `lookupQuerySchema` es aún más claro: `isbns` **entra** como texto separado por comas y **sale** como arreglo (por el `transform`). Al cliente le importa el texto.
+
+### Lo que se pierde en la traducción
+
+JSON Schema describe **formas**: tipos, longitudes, patrones, valores permitidos. Lo que no es una forma, **se pierde en silencio**:
+
+| En Zod | En el JSON Schema | ¿Qué pasa? |
+|---|---|---|
+| `.regex(/^\d{13}$/)` | `"pattern": "^\\d{13}$"` | ✅ Se traduce |
+| `.min(1)`, `.max(100)`, `.int()`, `z.enum([...])` | `minLength`, `maximum`, `integer`, `enum` | ✅ Se traduce |
+| `.refine(hasValidIsbn13Checksum)` (dígito de control) | — | ❌ **Desaparece**: es una función, no una forma |
+| `.refine(q => q.desde <= q.hasta)` | — | ❌ **Desaparece** |
+| `.transform(...)` | Solo el tipo de entrada | ⚠️ Con `io: "input"` está bien |
+| Los mensajes de error (`"El título es obligatorio"`) | — | ⚠️ No son parte del contrato |
+
+Sin hacer nada, la documentación diría "el ISBN son 13 dígitos", y un cliente que mande `9780156012196` (13 dígitos, dígito de control inválido) recibiría un 400 que la documentación **no anunciaba**. La solución es contarlo con **`.meta()`**, que agrega datos al esquema sin cambiar cómo valida:
 
 ```js
-const { useCases } = buildLoanScenario({ loanRules: { maxActive: 1 } });           // otra regla
-const { useCases } = buildLoanScenario({ holidays: createFakeHolidays({ fail: true }) }); // API caída
-const { useCases } = buildLoanScenario({ now: "2026-11-05T09:00:00-03:00" });        // otro "hoy"
+// schemas/bookSchema.js
+isbn: z
+  .string()
+  .regex(/^\d{13}$/, "El ISBN debe tener exactamente 13 dígitos")
+  .refine(hasValidIsbn13Checksum, "El ISBN tiene un dígito de control inválido")
+  // El `refine` no se puede expresar en JSON Schema: la `description` es la forma de que el cliente se entere
+  .meta({ description: "ISBN-13: 13 dígitos con dígito de control válido", examples: ["9789500700122"] }),
 ```
 
-### Preparar el pasado: `givenLoan`
+`description` y `examples` aparecen en el JSON Schema, y Swagger UI los muestra al lado del campo. Lo mismo hicimos con `desde` ("no puede ser posterior a `hasta`") y con el `userId` de `POST /loans` ("solo admin").
 
-¿Cómo se prueba que un usuario con un préstamo **vencido** no puede pedir otro? Con la API habría que prestar y esperar dos semanas. En el test, escribimos el pasado **directamente en el DAO**, sin pasar por las reglas:
+> **La descripción va en el esquema, no en la documentación.** Así queda al lado de la regla que describe: quien cambie el `refine` la tiene enfrente.
+
+### De un esquema a un `requestBody` y a `parameters`
+
+Con eso armamos tres funciones chicas en `docs/zodToOpenApi.js`:
 
 ```js
-const { useCases, givenLoan } = buildLoanScenario(); // hoy: 2026-11-04
-await givenLoan({ userId: ANA.id, bookId: 1, fechaVencimiento: "2026-11-03" }); // venció ayer
+// requestBody de un endpoint a partir del esquema que valida el body
+function body(schema, { example } = {}) {
+  return {
+    required: true,
+    content: { "application/json": { schema: jsonSchema(schema, { io: "input" }), ...(example && { example }) } },
+  };
+}
 
-await expect(useCases.createLoan({ bookId: 2 }, ANA)).rejects.toMatchObject({ code: "USER_HAS_OVERDUE_LOANS" });
+// Un esquema de objeto → una lista de `parameters` (uno por propiedad), para la query o el path
+function params(schema, location) {
+  const { properties = {}, required = [] } = jsonSchema(schema, { io: "input" });
+  return Object.entries(properties).map(([name, { description, ...propSchema }]) => ({
+    name,
+    in: location,
+    required: location === "path" || required.includes(name), // un parámetro de path SIEMPRE es obligatorio
+    ...(description && { description }),
+    schema: propSchema,
+  }));
+}
+
+const query = (schema) => params(schema, "query");
+const path = (schema) => params(schema, "path");
 ```
 
-`givenLoan` usa `loansDao.lend(...)` con las fechas que le pasamos. Eso es posible porque en la clase 13 las fechas pasaron a decidirse **en el caso de uso** (con el reloj) y el DAO solo las guarda.
+`jsonSchema()` llama a `z.toJSONSchema()` y limpia un poco de ruido que no le aporta nada a quien lee: el `$schema` de cada esquema, el `maximum: 9007199254740991` que agrega `.int()` (el número entero más grande de JavaScript, un límite técnico y no del negocio) y una expresión regular de 200 caracteres que acompaña a `z.iso.date()` (con `format: "date"` alcanza).
+
+`queryLoansSchema`, por ejemplo, se convierte en cinco parámetros de query: `userId`, `bookId`, `activos`, `desde` y `hasta`, cada uno con su tipo y su descripción, sin escribir ninguno a mano.
 
 ---
 
-## 11. el tiempo en los tests
+## 8. no repetirse: el armador de operaciones
 
-Todo lo que depende de "hoy" es **no determinista** por naturaleza: un test que pasa el lunes puede fallar el sábado. Con el reloj inyectado de la clase 13, el problema desaparece: en el test, "hoy" es lo que digamos.
-
-```js
-// Mismo préstamo, dos "hoy" distintos: así se prueba el borde de R3 sin esperar nada
-it("borde: si vence HOY todavía no está vencido, y puede pedir otro", async () => {
-  const { useCases, givenLoan } = buildLoanScenario({ now: "2026-11-04T12:00:00-03:00" });
-  await givenLoan({ userId: ANA.id, bookId: 1, fechaVencimiento: "2026-11-04" });
-
-  await expect(useCases.createLoan({ bookId: 2 }, ANA)).resolves.toBeDefined();
-});
-
-it("el mismo préstamo pasa a estar vencido si 'viajamos' un día al futuro", async () => {
-  const { useCases, givenLoan } = buildLoanScenario({ now: "2026-11-05T09:00:00-03:00" });
-  await givenLoan({ userId: ANA.id, bookId: 1, fechaVencimiento: "2026-11-04" });
-
-  await expect(useCases.createLoan({ bookId: 2 }, ANA)).rejects.toMatchObject({ code: "USER_HAS_OVERDUE_LOANS" });
-});
-```
-
-Y el caso de zona horaria que justificó trabajar con días `AAAA-MM-DD`:
+Con los esquemas resueltos, falta lo que **se repetía** en la sección 5: `security`, el 401, el 403, el 400, el formato de los errores. Igual que el middleware `authenticate` aplica la autenticación en un solo lugar en lugar de copiarla en cada controller, escribimos **una función** que aplica esas reglas: `operation()` en `docs/operation.js`.
 
 ```js
-it("today() usa la zona horaria de la biblioteca, no UTC", () => {
-  const clock = createClock({ fixedNow: "2026-11-05T02:30:00Z" }); // 23:30 del 4 en Buenos Aires
-
-  expect(clock.today()).toBe("2026-11-04");
-});
+// docs/paths/loans.js
+"/loans": {
+  post: operation({
+    tag: "Préstamos",
+    id: "createLoan",
+    summary: "Pedir un libro prestado",
+    description: `Un lector pide a su nombre; el admin puede indicar \`userId\`.\n\n${RULES}`,
+    auth: "user",                  // "public" | "user" | "admin"
+    body: createLoanSchema,        // el MISMO esquema que usa el router para validar
+    bodyExample: { bookId: 1 },
+    responses: {
+      201: json("Préstamo creado", ref("Loan"), {
+        headers: { Location: { description: "URL del préstamo creado", schema: { type: "string" } } },
+      }),
+    },
+    errors: ["FORBIDDEN", "USER_NOT_FOUND", "BOOK_NOT_FOUND", "ALREADY_LOANED",
+             "USER_HAS_OVERDUE_LOANS", "LOAN_LIMIT_REACHED", "OUT_OF_STOCK"],
+  }),
+},
 ```
 
-### ¿Y `vi.useFakeTimers()`?
+Las reglas que aplica `operation()`:
 
-Vitest puede "congelar" el reloj global (`vi.setSystemTime(...)`) para que `new Date()` devuelva lo que quieras **aunque el código no reciba un reloj**. Es la solución cuando no podés cambiar el código. Pero tiene costos: afecta a **todo** el proceso (incluidos `setTimeout` y librerías), hay que acordarse de restaurarlo, y esconde la dependencia en lugar de hacerla visible. Con el reloj inyectado, la dependencia del tiempo **está en la firma** del caso de uso, y cualquiera que lo lea sabe que el resultado depende de la fecha.
+| Si la operación... | ...se agrega solo |
+|---|---|
+| valida `params`, `query` o `body` | `400 VALIDATION_ERROR` |
+| es `auth: "user"` o `"admin"` | `security: [{ bearerAuth: [] }]` y `401` con `TOKEN_MISSING`, `TOKEN_INVALID` y `TOKEN_EXPIRED` |
+| es `auth: "admin"` | `403 FORBIDDEN` |
+| es `auth: "public"` | `security: []` (público **explícito**: pisa el `security` global) |
+| lista `errors` | Los agrupa **por status** (los cuatro 409 van en una sola respuesta) y pone **un ejemplo con nombre por cada `code`** |
 
-*(`useFakeTimers` sí es muy útil para otra cosa: probar código con `setTimeout`, como los reintentos con espera creciente de la clase 12, sin esperar los segundos reales.)*
-
----
-
-## 12. el test como detector de acoplamiento
-
-Intentemos testear `createBook`, el caso de uso más simple del proyecto, tal como quedó en la clase 13:
+Los status y los mensajes de ejemplo salen de un **catálogo de errores** (`docs/errorCatalog.js`), uno por cada `code` que lanza la API:
 
 ```js
-// tests/usecases/books/createBook.test.js
-import createBook from "../../../usecases/books/createBook.js";
-```
-
-```
- FAIL  tests/usecases/books/createBook.test.js
-Error: Falta la variable de entorno JWT_SECRET (copiá .env.example a .env y completala)
- ❯ config/config.js:15:9
-```
-
-**El archivo explota antes de correr un solo test.** ¿Qué tiene que ver crear un libro con el secreto de los tokens? Nada. Pero `createBook` hace esto:
-
-```js
-import { LOW_STOCK_THRESHOLD } from "../../config/config.js"; // ← importa TODA la configuración
-```
-
-y `config.js` (con buen criterio, desde la clase 11) se niega a arrancar sin `JWT_SECRET`. El caso de uso quedó **acoplado a la configuración de toda la aplicación**.
-
-Hay dos "soluciones":
-
-1. **La que tapa el síntoma:** definir `JWT_SECRET` en el entorno de los tests, o usar `vi.mock("../../config/config.js")`. Funciona, pero el acoplamiento sigue ahí.
-2. **La que arregla el diseño:** hacer con el umbral lo mismo que hicimos en la clase 13 con `loanRules`: **inyectarlo**.
-
-```js
-// usecases/books/createBook.js
-async function createBook(data, dao, events, lowStockThreshold) {
+const ERROR_CATALOG = {
+  VALIDATION_ERROR: [400, "Datos de body inválidos"],
+  TOKEN_MISSING: [401, "Falta el header Authorization: Bearer <token>"],
   // ...
-  if (created.stock <= lowStockThreshold) {
-    events.emit(EVENTS.BOOK_LOW_STOCK, { id: created.id, titulo: created.titulo, stock: created.stock });
+  LOAN_LIMIT_REACHED: [409, "Un usuario puede tener hasta 3 préstamos activos"],
+  OUT_OF_STOCK: [409, "No hay stock disponible de ese libro"],
+  // ...
+};
+```
+
+Si una operación lista un `code` que no está en el catálogo, `operation()` **lanza un error** al armar el documento: un typo como `"LOAN_LIMIT_REACHD"` no llega a la documentación.
+
+El resultado es OpenAPI **estándar**: no hay nada mágico, y se puede ver completo en `GET /openapi.json`. El helper solo evita escribir 60 líneas por endpoint.
+
+### Una extensión propia: `x-roles`
+
+OpenAPI permite agregar campos propios siempre que empiecen con **`x-`** (las herramientas los ignoran). Cada operación lleva `"x-roles"` con los roles que pueden usarla (`[]` si es pública, `["lector", "admin"]` con token, `["admin"]` solo admin). No es para Swagger UI: es para **un test** (sección 11).
+
+### El documento entero
+
+`docs/openapi.js` junta todo en una función:
+
+```js
+function buildOpenApiSpec({ serverUrl = "/" } = {}) {
+  return {
+    openapi: "3.1.0",
+    info: { title: "Biblioteca API", version: "1.0.0", description: "..." },
+    servers: [{ url: serverUrl }],
+    tags: [/* Autenticación, Libros, Préstamos, Usuarios, Catálogo externo */],
+    paths: { ...authPaths, ...booksPaths, ...loansPaths, ...usersPaths, ...catalogPaths },
+    components: {
+      schemas, // Book, Loan, User, ErrorResponse... (sección 10)
+      securitySchemes: { bearerAuth: { type: "http", scheme: "bearer", bearerFormat: "JWT" } },
+    },
+    security: [{ bearerAuth: [] }],
+  };
+}
+```
+
+¿Por qué una **función** y no un objeto exportado? Por lo mismo que el resto del proyecto desde la clase 8: lo que cambia según el entorno (la URL del servidor) llega **por parámetro**. `buildOpenApiSpec` no importa `config.js`, así que los tests la pueden llamar **sin `.env`**.
+
+La `description` de `info` es un buen lugar para lo que vale para **toda** la API: cómo autenticarse, el formato de los errores ("compará el `code`, no el `message`"), y cómo vienen las fechas (instantes en UTC; días como `AAAA-MM-DD` en la zona de la biblioteca).
+
+---
+
+## 9. documentar es hacerse preguntas
+
+Documentar no es solo describir. Para escribir la lista de `errors` de cada operación hay que preguntarse, endpoint por endpoint, **"¿qué puede salir mal acá?"**. Y a veces la respuesta es "no sé" o "algo que no debería".
+
+Así pasó con `PUT /books/:id`. Al escribir sus errores: `INVALID_STOCK` (stock negativo), `BOOK_NOT_FOUND`... ¿y si mando el **ISBN de otro libro**? `POST /books` responde `409 ISBN_DUPLICATE`. Pero `updateBook` **no lo verificaba**:
+
+| Persistencia | `PUT /books/3` con el ISBN del libro 1 |
+|---|---|
+| `memory` | `200 OK`: quedan **dos libros con el mismo ISBN** |
+| `sequelize` | `500 INTERNAL_ERROR`: el índice único de la base lo frena, pero con un error genérico |
+
+Ninguno de los 118 tests lo detectó, porque nadie había pensado ese caso. Lo arreglamos como en la clase 14: **primero el test** (rojo), después el código (verde):
+
+```js
+// usecases/books/updateBook.js
+if (changes.isbn) {
+  const owner = await dao.getByIsbn(changes.isbn);
+  if (owner && owner.id !== Number(id)) {
+    throw new AppError("ISBN_DUPLICATE", "Ese ISBN ya está registrado", 409);
   }
 }
+```
 
-// usecases/books/makeBookUseCases.js
-function makeBookUseCases(dao, loansDao, events, catalog, { importConcurrency, lowStockThreshold }) {
-  const createBookUseCase = (data) => createBook(data, dao, events, lowStockThreshold);
-  // ...
+El `owner.id !== Number(id)` importa: reenviar el ISBN que el libro **ya tiene** (un formulario que manda todos los campos) no es un duplicado. Ese también es un test.
+
+> **Una documentación de errores incompleta suele esconder un bug.** Si no sabés qué responde tu API en un caso, tu cliente tampoco lo va a saber, y probablemente tu código tampoco lo haya pensado.
+
+---
+
+## 10. las respuestas también tienen contrato
+
+Los esquemas de `schemas/` describen lo que **entra**. Para lo que **sale** (un libro, un préstamo, el informe de importación) no había nada: los casos de uso devuelven objetos y listo. Los escribimos en `docs/responseSchemas.js`, **también con Zod**:
+
+```js
+const Loan = z.strictObject({
+  id,
+  userId: id,
+  bookId: id,
+  fechaPrestamo: instant,              // z.iso.datetime(): "2026-11-04T15:00:00.000Z"
+  fechaVencimiento: day,               // z.iso.date(): "2026-11-19"
+  fechaDevolucion: instant.nullable(),
+  renovaciones: z.number().int().min(0),
+  usuario: z.strictObject({ id, nombre: z.string() }).nullable(),
+  libro: z.strictObject({ id, titulo: z.string() }).nullable(),
+  estado: z.enum(["activo", "vencido", "devuelto"]).meta({ description: "Calculado, no guardado" }),
+  diasAtraso: z.number().int().min(0),
+  holidaysAvailable: z.boolean().optional().meta({ description: "Solo al prestar o renovar..." }),
+});
+
+// Sin passwordHash: nunca sale de la API
+const User = z.strictObject({ id, nombre: z.string(), email: z.email(), rol: z.enum(["lector", "admin"]) });
+```
+
+¿Por qué Zod, si no vamos a validar las respuestas en el servidor? Por dos motivos:
+
+1. Se convierten a JSON Schema con **la misma función** que los de entrada, y entran en `components.schemas`.
+2. **Se pueden ejecutar.** Un esquema de Zod no es solo un dibujo: es un programa que dice "esto cumple" o "esto no cumple". Eso permite escribir **tests de contrato**.
+
+### Tests de contrato
+
+Un test de contrato ejecuta el caso de uso **de verdad** y verifica que lo que devuelve cumple lo documentado:
+
+```js
+// tests/contract/responses.test.js
+const wire = (value) => JSON.parse(JSON.stringify(value)); // lo mismo que hace res.json()
+
+function expectToMatchContract(schema, value) {
+  const result = schema.safeParse(wire(value));
+  expect(result.success, result.error && JSON.stringify(result.error.issues, null, 2)).toBe(true);
 }
+
+it("POST /loans devuelve un Loan (con holidaysAvailable)", async () => {
+  const loan = await scenario.useCases.createLoan({ bookId: 1 }, ANA);
+  expectToMatchContract(R.Loan, loan);
+});
+```
+
+Dos decisiones que importan:
+
+- **`wire()`**: no se valida el objeto que devuelve el caso de uso, sino **lo que viaja por la red**. `fechaPrestamo` es un `Date` en JavaScript, pero `res.json()` lo convierte en texto ISO. El cliente recibe texto, y eso es lo que se documenta.
+- **`z.strictObject`**: un campo que **no está documentado** hace fallar el test. Si un día `passwordHash` se filtra en la respuesta de un usuario, nos enteramos en el test y no en un incidente de seguridad.
+
+### El test encontró algo
+
+La primera vez que corrimos el test de contrato de `PUT /loans/:id/return`, falló:
+
+```
+AssertionError: [
+  { "code": "unrecognized_keys", "keys": ["atrasoAlDevolver"], "message": "Unrecognized key: \"atrasoAlDevolver\"" }
+]
+```
+
+`returnLoan` devuelve un campo, `atrasoAlDevolver` (con cuántos días de atraso se devolvió), que la clase 13 agregó y que **nadie había documentado**. Exactamente lo que el test tiene que atrapar. Lo agregamos al esquema `Loan` con su descripción, y el test pasó.
+
+> **Un test de contrato no prueba reglas de negocio** (eso ya lo hacen los de la clase 14). Prueba que **la documentación dice la verdad** sobre la forma de las respuestas.
+
+---
+
+## 11. la documentación que se verifica sola
+
+Lo generado desde Zod no se puede desfasar. Pero hay cosas que el documento dice y que **no** salen de Zod: qué rutas existen y quién puede usarlas. Para eso, `tests/docs/openapi.test.js`.
+
+### 1. El documento es OpenAPI válido
+
+```js
+import SwaggerParser from "@apidevtools/swagger-parser";
+
+it("es un documento OpenAPI 3.1 válido", async () => {
+  // validate() modifica el objeto (resuelve los $ref): se le pasa una copia
+  await expect(SwaggerParser.validate(structuredClone(spec))).resolves.toBeDefined();
+});
+```
+
+Un `$ref` a un esquema que no existe, un parámetro de path sin `required: true`, un status inválido: Swagger UI muestra un error, Postman no importa, y el generador de clientes se niega. Mejor enterarse en el test.
+
+### 2. Cada ruta de Express está documentada (y al revés)
+
+Express guarda las rutas de cada router en `router.stack`. Construimos los routers con un controlador y unos middlewares **falsos** (dobles, como en la clase 14) y leemos esa lista:
+
+```js
+// Middlewares reconocibles: el test sabe cuál es cuál
+function authenticate(req, res, next) { next(); }
+const authorize = (...roles) => Object.assign((req, res, next) => next(), { roles });
+const anyController = new Proxy({}, { get: () => (req, res) => res.end() }); // responde a cualquier método
+
+const MOUNTS = [
+  ["/books", createBooksRouter(anyController, { authenticate, authorize })],
+  ["/loans", createLoansRouter(anyController, { authenticate, authorize })],
+  // ...
+];
+
+// "/books" + "/:id/details" → "GET /books/{id}/details", con su acceso: "public" | "user" | "admin"
+function expressRoutes() {
+  return MOUNTS.flatMap(([prefix, router]) =>
+    router.stack.filter((layer) => layer.route).flatMap((layer) => {
+      const handlers = layer.route.stack.map((l) => l.handle);
+      const roles = handlers.find((h) => Array.isArray(h.roles))?.roles;
+      const access = roles ? "admin" : handlers.includes(authenticate) ? "user" : "public";
+      return Object.keys(layer.route.methods).map((method) => ({
+        key: `${method.toUpperCase()} ${toOpenApiPath(prefix, layer.route.path)}`,
+        access,
+      }));
+    })
+  );
+}
+```
+
+Con las dos listas (rutas reales y operaciones documentadas) los tests son una resta:
+
+```js
+it("cada ruta de Express está documentada", () => {
+  const missing = routes.map((r) => r.key).filter((key) => !documentedKeys.includes(key));
+  expect(missing, "Rutas sin documentar").toEqual([]);
+});
+```
+
+### 3. El acceso documentado coincide con el real
+
+Acá entra `x-roles`. Si el router de `GET /loans/:id` tiene `authenticate` pero la documentación dice que es solo admin (o al revés, si alguien saca el `authorize("admin")` de una ruta y la documentación sigue diciendo "solo admin"), falla:
+
+```
+× GET /loans/{id}: el acceso documentado es 'user', igual que en el router
+AssertionError: expected 'admin' to be 'user'
+```
+
+### Verlo en rojo
+
+Como aprendimos en la clase 14 (sección 15.10), antes de confiar en estos tests hay que **romper algo a propósito**. Agregamos `router.get("/stats", controller.list)` en `booksRoutes.js` sin documentarla, y cambiamos el `auth` de `getLoan` a `"admin"`:
+
+```
+× cada ruta de Express está documentada
+  AssertionError: Rutas sin documentar: expected [ 'GET /books/stats' ] to deeply equal []
+× GET /loans/{id}: el acceso documentado es 'user', igual que en el router
+```
+
+Y un detalle de la clase 14: si `expressRoutes()` tuviera un bug y devolviera `[]`, "cada ruta está documentada" pasaría **en verde sin verificar nada**. Por eso el archivo empieza verificando que encontró más de 20 rutas.
+
+### Otra vez: si cuesta testearlo, está acoplado
+
+Para construir el router de autenticación en el test, hubo que importar `routes/authRoutes.js`, que importaba `LOGIN_RATE_LIMIT_MAX` de `config.js`... que exige `JWT_SECRET`. **El mismo problema de la clase 14** (sección 12), en otra capa. La solución, la misma: el límite llega **por parámetro**.
+
+```js
+// routes/authRoutes.js
+function createAuthRouter(controller, { authenticate }, { loginRateLimitMax = 5 } = {}) { ... }
 
 // container/container.js
-makeBookUseCases(booksDao, loansDao, events, catalog, { importConcurrency: IMPORT_CONCURRENCY, lowStockThreshold: LOW_STOCK_THRESHOLD });
+router.use("/auth", createAuthRouter(authController, auth, { loginRateLimitMax: LOGIN_RATE_LIMIT_MAX }));
 ```
-
-Ahora el test no necesita ninguna variable de entorno, y además puede probar **cualquier umbral**:
-
-```js
-it("el umbral llega inyectado: con umbral 10, un stock de 5 ya es bajo", async () => {
-  await createBook({ titulo: "Rayuela", autor: "Cortázar", stock: 5 }, dao, events, 10);
-
-  expect(events.emit).toHaveBeenCalledOnce();
-});
-```
-
-> **Si cuesta testearlo, está acoplado.** La dificultad para escribir un test casi nunca es un problema "del test": es el diseño avisando que una pieza depende de más cosas de las que debería. Por eso conviene escribir los tests **mientras** se escribe el código, y no meses después: el aviso llega cuando todavía es barato hacerle caso.
-
-*(La reflexión de la clase 10 sigue valiendo: el umbral es una regla del caso de uso. Lo que cambió es **de dónde la recibe**.)*
 
 ---
 
-## 13. escribiendo los escenarios de una regla
+## 12. Swagger UI: la documentación para personas
 
-La sección 8 de la clase 13 decía que una regla se prueba con cuatro casos. Pasados a tests de `createLoan`, R1 queda así:
-
-| Caso (clase 13)         | Test                                                                                          |
-| ----------------------- | --------------------------------------------------------------------------------------------- |
-| 1. Feliz                | "borde: con 2 activos, el tercero se presta" (el feliz y el borde coinciden)                  |
-| 2. Borde                | idem: el préstamo número 3 **sí**                                                    |
-| 3. La viola             | "con 3 activos, el cuarto se rechaza con 409 LOAN_LIMIT_REACHED y el mensaje dice el límite" |
-| 4. El estado no cambió | "tras el rechazo, el estado no cambió: ni stock ni préstamos"                               |
-
-Y aparecen casos que el `.http` no cubría, porque eran incómodos de preparar:
-
-- "Los préstamos **devueltos** no cuentan para el límite".
-- "El límite es **de cada usuario**: que Ana llegue al tope no afecta a Beto".
-- "El tope es **configuración**: con `maxActive = 1`, el segundo ya se rechaza".
-
-### Testear el orden de las reglas
-
-La clase 13 insistió en que **el orden de los chequeos importa** (R3 antes que R1, porque "devolvé el vencido" es más útil que "llegaste al tope"). Eso también es comportamiento, y también se testea, armando un escenario que viola **las dos** reglas a la vez:
+`/openapi.json` es para **máquinas**. Para **personas**, servimos el mismo documento con **Swagger UI**, usando el paquete `swagger-ui-express`:
 
 ```js
-it("orden: si está en el tope Y tiene uno vencido, gana R3 (el mensaje útil es 'devolvelo')", async () => {
-  const { useCases, givenLoan } = buildLoanScenario();
-  await givenLoan({ userId: ANA.id, bookId: 1, fechaVencimiento: "2026-10-30" }); // vencido
-  await givenLoan({ userId: ANA.id, bookId: 2, fechaVencimiento: "2026-11-20" });
-  await givenLoan({ userId: ANA.id, bookId: 3, fechaVencimiento: "2026-11-20" }); // ya tiene 3
+// routes/docsRoutes.js
+import express from "express";
+import swaggerUi from "swagger-ui-express";
 
-  await expect(useCases.createLoan({ bookId: 4 }, ANA)).rejects.toMatchObject({ code: "USER_HAS_OVERDUE_LOANS" });
-});
-```
+function createDocsRouter(spec) {
+  const router = express.Router();
 
-### Testear la degradación elegante
+  router.get("/openapi.json", (req, res) => res.json(spec));
 
-Con los dobles, las fallas de terceros se prueban sin desenchufar nada:
+  router.use(
+    "/docs",
+    swaggerUi.serve,                 // los archivos estáticos (JS y CSS de la página)
+    swaggerUi.setup(spec, {
+      customSiteTitle: "Biblioteca API — Docs",
+      swaggerOptions: {
+        persistAuthorization: true,  // el token pegado en "Authorize" sobrevive a un F5
+        displayRequestDuration: true,
+      },
+    })
+  );
 
-```js
-it("si la API de feriados está caída, presta igual contando solo fines de semana", async () => {
-  const { useCases } = buildLoanScenario({ holidays: createFakeHolidays({ fail: true }) });
-  vi.spyOn(console, "warn").mockImplementation(() => {}); // silenciamos el aviso
-
-  const loan = await useCases.createLoan({ bookId: 1 }, ANA);
-
-  expect(loan).toMatchObject({ fechaVencimiento: "2026-11-18", holidaysAvailable: false });
-});
-
-it("un error que NO es de la API (un bug propio) no se oculta", async () => {
-  const holidaysRoto = { getHolidays: vi.fn().mockRejectedValue(new TypeError("x is not a function")) };
-  const { useCases } = buildLoanScenario({ holidays: holidaysRoto });
-
-  await expect(useCases.createLoan({ bookId: 1 }, ANA)).rejects.toThrow(TypeError);
-});
-```
-
-El segundo test protege una decisión de la clase 12 que es fácil de "simplificar" sin querer: el `if (!(err instanceof AppError)) throw err`. Si alguien lo borra, la API seguiría respondiendo `201` con bugs escondidos, y **este test es el único que se entera**.
-
----
-
-## 14. ¿cuánto testear? cobertura y tests que protegen
-
-### Cobertura
-
-```bash
-npm run coverage
-```
-
-```
-File               | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s
--------------------|---------|----------|---------|---------|-------------------
-All files          |   50.98 |    56.48 |   37.03 |   51.73 |
- usecases/loans    |   82.29 |    74.24 |   72.22 |   82.22 |
-  getLoans.js      |       0 |        0 |       0 |       0 | 13-29
-  returnLoan.js    |    92.3 |    91.66 |     100 |    92.3 | 28
-```
-
-*(El reporte de texto **oculta los archivos con 100%**, como `domain/` o `createLoan.js`: muestra solo lo que tiene algo pendiente. En `coverage/index.html` se ven todos.)*
-
-- **Stmts / Lines:** qué porcentaje de las líneas se ejecutó al menos una vez durante los tests.
-- **Branch:** qué porcentaje de los caminos de cada `if` / `?:` / `??` se recorrió (el `if` **y** el `else`).
-- **Uncovered Line #s:** las líneas que **ningún** test ejecutó. Es lo más útil del reporte.
-- `coverage/index.html` muestra cada archivo con las líneas no cubiertas pintadas de rojo.
-
-La cobertura dice **qué NO está testeado**, y eso es valioso: `returnLoan.js` línea 28 es el caso de carrera "otro pedido lo devolvió justo antes". Nadie lo probó.
-
-Pero **no dice que lo testeado esté bien**. Un test que llama a `createLoan` y no tiene ningún `expect` sube la cobertura al 100% y no verifica nada. Por eso:
-
-> **100% de cobertura no es la meta.** La meta es que las reglas que importan estén protegidas. Un 80% bien elegido vale más que un 100% de tests que no afirman nada.
-
-### ¿Qué priorizar?
-
-| Sí, primero                                                             | Después, o no                                                               |
-| ------------------------------------------------------------------------ | ---------------------------------------------------------------------------- |
-| Reglas de negocio (R1–R5, permisos, existencia)                         | Getters triviales (`getBookById` que solo llama al DAO)                    |
-| Bordes (el préstamo 3 y el 4, vence hoy, cruce de año)                 | Código de librerías externas (Zod, Express, Sequelize ya tienen sus tests) |
-| Caminos de error y "el estado no cambió"                                | Controllers y routers (eso es integración)                                  |
-| Lógica de calendario, cálculo, transformación (funciones puras)       | `console.log`, configuración                                              |
-| Bugs que ya pasaron (un test por cada bug arreglado, para que no vuelva) |                                                                              |
-
-### ¿Mis tests protegen algo? Rompé el código a propósito
-
-La prueba de fuego de un test es: **si introduzco un bug, ¿falla?** Hagamos la prueba en `createLoan`:
-
-```js
-if (activeLoans.length >= loanRules.maxActive) {   // original
-if (activeLoans.length > loanRules.maxActive) {    // bug: ahora se pueden tener 4
-```
-
-```
- × con 3 activos, el cuarto se rechaza con 409 LOAN_LIMIT_REACHED y el mensaje dice el límite
- × tras el rechazo, el estado no cambió: ni stock ni préstamos
- × el tope es configuración: con maxActive = 1, el segundo ya se rechaza
- × fail fast: si una regla rechaza el pedido, NO se consulta la API de feriados
-
- Tests  4 failed | 114 passed (118)
-```
-
-Cuatro tests lo detectan. Si **ninguno** hubiera fallado, nos faltaría un test. Esta técnica (alterar el código para ver si los tests lo notan) tiene un nombre, **mutation testing**, y existen herramientas que la automatizan. A mano, con dos o tres cambios en las reglas más importantes, ya da muchísima información.
-
----
-
-## 15. tips de la vida real
-
-Lo que sigue no es teoría de testing: son costumbres de equipos que testean todos los días. Algunas parecen obvias hasta que te pasan.
-
-### 15.1. Los tests nunca apuntan a la base de producción
-
-Es verdad, y vale aunque el test "solo cree cosas temporales y las borre al final". Esos datos temporales:
-
-- **Disparan efectos reales**: un préstamo de prueba emite `book.lowStock`, y en producción el notificador no escribe en la consola, **manda un mail**.
-- **Ensucian lo que no se borra**: los ids autoincrementales se consumen, quedan registros en logs y auditoría, y aparecen en los reportes y en el CSV de la clase 12.
-- **Chocan con usuarios reales**: el test descuenta stock del libro que alguien está por pedir, o le gana el último ejemplar.
-- **No siempre se limpian**: si el test falla o se corta a la mitad, el `afterEach` que borraba nunca corre.
-- **Pegan a APIs de terceros** con la cuenta y el límite de pedidos de producción.
-
-Por eso la suite (`npm test`) corre **en tu máquina y en el servidor de integración continua**, nunca contra producción, y cada nivel tiene su propia base:
-
-| Tipo de test           | ¿Qué base usa?                                                                                                              |
-| ---------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
-| Unitarios (los de hoy) | **Ninguna**: DAOs en memoria                                                                                            |
-| Integración           | Una base **propia y descartable**: SQLite en `:memory:`, o una base de test que se crea y se destruye en cada corrida |
-| End-to-end             | Un entorno de **staging** (copia de producción con datos falsos)                                                       |
-
-> **El matiz: "testing in production" existe, pero es otra cosa.** Después de un deploy, muchos equipos corren un *smoke test* (¿responde `/health`? ¿anda el login?), tienen *monitoreo sintético* (un robot que cada 5 minutos consulta un libro) o hacen *canary releases* (la versión nueva le llega primero al 5% de los usuarios). Son chequeos chicos, casi siempre **de solo lectura**, y cuando escriben algo usan cuentas de prueba marcadas y fáciles de excluir. No es correr la suite.
-
-**Ojo con nuestro propio proyecto:** `connection/sequelize.js` usa `storage: "./database.sqlite"`. Un test de integración que importe esa conexión tal cual **escribe en tu base de desarrollo**. La forma segura es que la conexión también se configure por variable de entorno (`DB_STORAGE=:memory:` en los tests), y además poner una **barrera** que se niegue a correr si algo huele a producción:
-
-```js
-// tests/setup.js (se registra en vitest.config.js con setupFiles: ["tests/setup.js"])
-if (process.env.NODE_ENV === "production" || process.env.DATABASE_URL?.includes("prod")) {
-  throw new Error("Los tests no se corren contra producción. Revisá tus variables de entorno.");
+  return router;
 }
 ```
 
-### 15.2. Los tests no usan secretos ni servicios reales
+Como siempre, el router **recibe** el documento armado: no decide qué se documenta, solo cómo se sirve. Y el contenedor lo monta:
 
-- Nada de `JWT_SECRET` de producción, claves de APIs pagas ni contraseñas reales en un test: los tests se suben al repositorio y los lee cualquiera.
-- Si un test necesita un secreto, que sea uno inventado (`"secreto-de-test"`). Mejor todavía: que no lo necesite (sección 12).
-- Los mails, SMS y pagos se reemplazan **siempre** por dobles. Un test que manda un mail real termina, tarde o temprano, mandándoselo a un cliente.
+```js
+// container/container.js
+if (DOCS_ENABLED) {
+  router.use(createDocsRouter(buildOpenApiSpec()));
+}
+```
 
-### 15.3. Un test que falla "a veces" es un bug, no mala suerte
+### Usarla
 
-Un **test intermitente** (*flaky*) pasa y falla sin que nadie toque el código. Casi siempre la causa es una de estas: la hora real, el orden de los tests, el estado compartido, la red, o un `setTimeout` con un tiempo justo. El peor remedio es "volver a correrlo hasta que pase": a las dos semanas nadie confía en la suite y se ignoran también los fallos de verdad. Se arregla, o se borra y se escribe bien.
+1. Abrí `http://localhost:8000/docs`.
+2. Desplegá `POST /auth/login`, tocá **Try it out**, ejecutalo con el admin.
+3. Copiá el `token` de la respuesta, tocá **Authorize** (arriba a la derecha) y pegalo **sin** la palabra `Bearer` (Swagger UI la agrega).
+4. Ahora cualquier endpoint protegido manda el header `Authorization`. Swagger UI muestra además el `curl` equivalente de cada pedido.
 
-### 15.4. Nunca subas un `.only`
+> **"Try it out" no es un simulador.** Le pega al servidor de verdad: un `DELETE /books/1` desde Swagger UI borra el libro 1. Contra un servidor de producción, es producción.
 
-`it.only(...)` y `describe.only(...)` corren **solo ese** test: son muy cómodos mientras trabajás en uno. Pero si se suben al repositorio, el resto de la suite deja de correr y todo "pasa". Vitest falla a propósito si encuentra un `.only` cuando corre en CI; igual, revisalo antes de cada commit. `it.skip` (saltear) y `it.todo` (pendiente) sí se pueden subir, pero con un motivo y por poco tiempo.
+### ¿Se publica en producción?
 
-### 15.5. Cada bug arreglado deja un test
+| A favor de publicarla | En contra |
+|---|---|
+| Si la API es **pública** (otros la integran), la documentación es parte del producto | En una API **interna**, le das el mapa completo a cualquiera que llegue a la URL |
+| Es la forma más rápida de que alguien de otro equipo la entienda | "Try it out" contra producción es un riesgo operativo |
 
-Cuando aparece un bug: **primero** escribí el test que lo reproduce y comprobá que falla, **después** arreglalo y comprobá que pasa. Así queda demostrado que el arreglo funciona, y el bug no puede volver sin que alguien se entere. Es la forma más barata de construir una suite útil: cada test existe porque algo ya se rompió una vez.
+Importante: **ocultar la documentación no es seguridad.** Si un endpoint está mal protegido, está mal protegido con o sin Swagger: un atacante prueba URLs igual (eso se llama *security through obscurity* y no funciona). Lo que la documentación cambia es cuánto le cuesta a alguien encontrar el problema.
 
-### 15.6. La suite corre antes de mergear, no "cuando me acuerdo"
+Nosotros elegimos un término medio configurable: **`DOCS_ENABLED`**, encendida por defecto en desarrollo y apagada en producción si no se define.
 
-El valor de los tests está en que corren **siempre**. Lo habitual es que el servidor de integración continua (GitHub Actions, GitLab CI) ejecute `npm test` en cada *pull request*, y que no se pueda mergear con tests en rojo. Localmente, `npm run test:watch` mientras programás.
+```js
+// config/config.js
+const DOCS_ENABLED = (process.env.DOCS_ENABLED ?? (NODE_ENV === "production" ? "false" : "true")) === "true";
+```
 
-### 15.7. Rápidos o no se usan
-
-Si la suite tarda 10 minutos, nadie la corre antes de hacer *push*. Mantené los unitarios en milisegundos: nada de bcrypt real, red ni base. Y nada de esperas fijas (`await wait(2000)` "para que termine"): si algo depende del tiempo, se inyecta el reloj o se usan *fake timers*.
-
-### 15.8. Los tests también son código
-
-Se leen, se revisan en el *code review* y se refactorizan. Un test que nadie entiende es un test que alguien va a borrar cuando falle. Valen las mismas reglas que para el resto del código: buenos nombres, nada de duplicación innecesaria (para eso están los helpers), y nada de lógica complicada **dentro** del test (`if`, `for` con cálculos): si el test calcula el resultado esperado con la misma lógica que el código, va a tener el mismo bug.
-
-### 15.9. No mockees lo que no es tuyo
-
-No hagas `vi.mock("bcryptjs")` ni `vi.mock("sequelize")`: estarías adivinando cómo se comporta una librería que no controlás, y el test seguiría pasando aunque la librería cambie. Lo que hicimos durante el curso es la alternativa: **envolver** la librería en una pieza propia con un contrato chico (`hasher`, `tokens`, `catalog`, `holidays`) y reemplazar **esa** pieza. Lo que hay adentro del envoltorio se prueba, si hace falta, con un test de integración.
-
-### 15.10. Un test en verde que nunca viste en rojo no prueba nada
-
-Antes de confiar en un test nuevo, rompé a propósito el código que dice proteger (o cambiá el valor esperado) y mirá que falle. Es la versión de un minuto de la sección 14, y atrapa los `await` olvidados, los `expect` que nunca se ejecutan y los tests que miran el objeto equivocado.
+Las alternativas que vas a ver en el trabajo: publicarla detrás de autenticación, publicarla en un sitio aparte (generado desde `openapi.json`), o publicar solo `/openapi.json` en un portal interno de APIs.
 
 ---
 
-## 16. tests con un agente de IA: SDD y harness
+## 13. de OpenAPI a la colección de pruebas
 
-Un agente de programación (Claude Code, Copilot, Cursor...) puede escribir los 118 tests de hoy en minutos. Si le decís solo "haceme los tests de createLoan", el resultado típico es este: muchos tests que **pasan**, con nombres genéricos, que verifican cómo está escrito el código y no qué debería hacer (si el código tiene un bug, el agente escribe el test que lo confirma), con un `vi.mock` para cada cosa, y a veces con el código de producción "arreglado" para que el test pase.
+### Postman, Insomnia, Bruno
 
-Dos ideas ayudan a usarlo bien:
+Como el documento es estándar, no hace falta armar la colección de Postman a mano: se **importa**. Para eso no hace falta ni levantar el servidor:
 
-**SDD (*Spec-Driven Development*, desarrollo guiado por especificación).** Primero se escribe y se aprueba una **especificación**: qué comportamientos hay que verificar, con sus casos de borde y sus errores, en lenguaje natural. Recién después el agente escribe el código (acá, los tests) a partir de ella. Con esto:
+```bash
+npm run docs:export        # escribe openapi.json (scripts/exportOpenApi.js)
+```
 
-- Lo que revisás es la **spec**, que es corta y se lee en dos minutos. Es mucho más fácil detectar ahí que falta el borde de "vence hoy" que en 400 líneas de tests.
-- Los tests salen de **lo que la regla debería hacer** (la tabla R1–R5 de la clase 13), no de lo que el código hace hoy.
-- La spec queda en el repositorio como documentación.
+En Postman: **Import → File → `openapi.json`**. Aparece una carpeta por tag (Libros, Préstamos...), un pedido por operación, con los parámetros y los cuerpos de ejemplo ya cargados. Y con **Newman** (el runner de Postman por consola) esa colección se puede correr en un pipeline.
 
-**Harness (el "arnés" del agente).** Es todo lo que rodea al modelo y lo mantiene en carril: las **instrucciones del proyecto** (un archivo `AGENTS.md` o `CLAUDE.md` en la raíz, que el agente lee siempre), los **comandos** que puede usar para verificar su trabajo (`npm test`, `npm run coverage`), los **límites** (qué archivos puede tocar y cuáles no) y una **definición de terminado** que se pueda comprobar ejecutando algo y no "porque el agente dice que terminó". Un buen arnés convierte las convenciones de esta clase (el helper de escenarios, nada de `.env`, verificar `code` y no `message`, romper el código a propósito) en reglas que el agente sigue sin que se las repitas en cada pedido.
+`openapi.json` está en el `.gitignore`: es un archivo **generado**, y la fuente de verdad es el código. (Algunos equipos sí lo versionan, para que en cada *pull request* se vea el cambio del contrato. Si lo hacés, sumá un test que verifique que el archivo versionado coincide con el generado: si no, se desfasa.)
 
-En `prompt-agente.md` hay un `AGENTS.md` listo para copiar y los prompts para cada fase (spec → revisión → tests → verificación).
+### El `.http` también se profesionaliza
 
-> **Vos seguís siendo el responsable.** El agente acelera la escritura, no la reemplaza: la spec la aprobás vos, y si un test está mal, el bug que se escapa es tuyo.
+`requests.http` tenía `http://localhost:8000` escrito **134 veces**. Si mañana el puerto es otro, o querés probar contra un servidor desplegado, hay que reemplazar en todo el archivo. REST Client admite variables de archivo:
+
+```http
+@baseUrl = http://localhost:8000
+
+### 1. Obtener todos los libros
+GET {{baseUrl}}/books
+```
+
+Es el mismo principio que `config.js`: **un valor que cambia según el entorno se define en un solo lugar**. (En Postman, lo mismo se hace con *environments*.)
+
+---
+
+## 14. el README profesional
+
+El README es lo **primero** que ve alguien que llega al repositorio: un compañero, quien te corrige, alguien que te quiere contratar y mira tu GitHub. Su lector es **una persona que nunca vio el proyecto y lo quiere levantar**. Tiene cinco minutos de paciencia.
+
+### Las secciones
+
+| Sección | Responde | Error típico |
+|---|---|---|
+| **Qué es** (1–3 líneas) | ¿Qué problema resuelve? | Empezar por la tecnología ("API en Express con Sequelize...") en lugar del problema |
+| **Requisitos** | ¿Qué tengo que tener instalado? ¿Qué versión? | Omitir la versión de Node, y que falle con un error críptico |
+| **Puesta en marcha** | Los comandos, **en orden**, para que funcione | Saltear el `cp .env.example .env` "porque es obvio" |
+| **Variables de entorno** | Qué significa cada una, su valor por defecto, cuáles son obligatorias | Una lista de nombres sin explicación |
+| **Scripts** | Qué hace cada `npm run` | — |
+| **Uso / Endpoints** | Un resumen, y **dónde está el detalle** (`/docs`) | Copiar los 23 endpoints con todos sus campos: se desfasa |
+| **Arquitectura** | Cómo está organizado y por qué | Pegar el árbol de carpetas sin decir qué es cada una |
+| **Tests** | Cómo se corren y qué cubren | — |
+| **Limitaciones conocidas** | Qué **no** hace bien, a sabiendas | Omitirlas: parece que no las viste |
+| **Problemas frecuentes** | Síntoma → causa → solución | — |
+
+El README de la biblioteca (`README.md`) sigue esa estructura. Algunas decisiones:
+
+- **El primer pedido está explicado**, paso a paso: login con el admin, copiar el token, Authorize. Es lo que más tiempo hace perder a alguien nuevo.
+- **La tabla de variables de entorno** tiene las 28, con su valor por defecto y para qué sirven. Es la sección que más se consulta después de la instalación.
+- **Los endpoints van resumidos** en una tabla por recurso, con un enlace a `/docs` para el detalle. El README no compite con Swagger: lo presenta.
+- **La arquitectura tiene un diagrama** en Mermaid (GitHub lo dibuja solo) y, sobre todo, **las decisiones** que alguien tiene que conocer antes de tocar el código: "los casos de uso no leen `process.env` ni llaman a `new Date()`".
+- **Las limitaciones son honestas**: el token vale hasta que vence aunque borres al usuario, la condición de carrera del tope de préstamos, el rate limit en memoria. Escribirlas muestra que las pensaste; esconderlas, que no las viste.
+
+### La prueba del compañero
+
+Un README se prueba como el código: **ejecutándolo**. Pedile a alguien (o hacelo vos, en una carpeta nueva) que **clone el repositorio y siga solo el README**, sin preguntarte nada. Cada vez que se traba, falta algo. Los clásicos:
+
+- `Falta la variable de entorno JWT_SECRET`: el README no decía que había que copiar el `.env`.
+- `npm ERR! engine`: la versión de Node no estaba en los requisitos (para eso está `"engines"` en `package.json`).
+- "¿Cuál es la contraseña del admin?": estaba en el `.env.example`, pero el README no lo decía.
+- Un comando que funciona en Linux y no en Windows (`cp`), sin la alternativa.
+
+---
+
+## 15. checklist de buenas prácticas
+
+Durante 15 clases fuimos sumando decisiones. Este checklist las junta en preguntas que se pueden **verificar**: cada ítem tiene una forma concreta de comprobarlo, no un "más o menos". Es también la guía para el simulacro de la clase 16 y para el final.
+
+### Arquitectura
+
+| ✔ | Pregunta | Cómo verificarlo |
+|---|---|---|
+| ☐ | ¿Los controllers solo traducen HTTP ↔ caso de uso (sin reglas de negocio)? | Ningún `if` de negocio en `controllers/` |
+| ☐ | ¿Los casos de uso no conocen Express (`req`, `res`, status HTTP)? | `grep -rnE "\b(req\|res)\." usecases/` no encuentra nada |
+| ☐ | ¿Los casos de uso no leen `process.env`, no llaman a `new Date()` ni a `fetch`? | `grep -rn "process.env\|new Date()\|fetch(" usecases/ domain/` solo encuentra comentarios |
+| ☐ | ¿Todas las dependencias se arman en **un solo** lugar (Composition Root)? | Solo `container/` hace `new` de DAOs, gateways y servicios |
+| ☐ | ¿La persistencia se puede cambiar sin tocar los casos de uso? | Correr con `PERSISTENCE_TYPE=memory` y `sequelize` |
+
+### REST y HTTP
+
+| ✔ | Pregunta | Cómo verificarlo |
+|---|---|---|
+| ☐ | ¿Las URL son sustantivos en plural y los verbos HTTP dicen la acción? | `/loans`, no `/getLoans` ni `/createLoan` |
+| ☐ | ¿Crear responde `201` (con `Location` si aplica) y borrar `204` sin cuerpo? | Probar en el `.http` |
+| ☐ | ¿Cada error tiene el status correcto? (`400` forma, `401` quién sos, `403` permiso, `404` no existe, `409` choca con el estado o una regla, `5xx` falla nuestra o de un tercero) | La tabla de la clase 13 |
+| ☐ | ¿Una ruta inexistente responde `404` con el formato estándar (no el HTML de Express)? | `GET /noexiste` |
+
+### Validación y errores
+
+| ✔ | Pregunta | Cómo verificarlo |
+|---|---|---|
+| ☐ | ¿Todo lo que entra (body, query, params) se valida **antes** del caso de uso? | Cada ruta con body/query/params tiene `validate(...)` |
+| ☐ | ¿Todos los errores tienen el **mismo formato** (`{ error: { code, message, details? } }`)? | Provocar un 400, un 404, un 409 y un 500 |
+| ☐ | ¿Un error inesperado responde `500` genérico, **sin** stack trace ni detalles internos? | Forzar un `TypeError` y mirar la respuesta |
+| ☐ | ¿Las reglas de negocio están en el caso de uso, no en el esquema de Zod? | Zod: forma. Caso de uso: reglas que consultan datos |
+
+### Seguridad
+
+| ✔ | Pregunta | Cómo verificarlo |
+|---|---|---|
+| ☐ | ¿Las contraseñas se guardan hasheadas (bcrypt) y **nunca** salen en una respuesta? | El test de contrato con `z.strictObject` |
+| ☐ | ¿El secreto del JWT no tiene valor por defecto y no está en el repositorio? | `config.js` falla sin `JWT_SECRET`; `.env` en `.gitignore` |
+| ☐ | ¿Cada endpoint de escritura está protegido, y los permisos por **dueño** se verifican en el caso de uso? | El test de acceso de `tests/docs/` |
+| ☐ | ¿El login da el **mismo** error si el email no existe o la contraseña es incorrecta? | Test de `loginUser` (clase 14) |
+| ☐ | ¿Hay un límite de intentos fallidos de login? | 6 logins fallidos seguidos → `429` |
+
+### Configuración y repositorio
+
+| ✔ | Pregunta | Cómo verificarlo |
+|---|---|---|
+| ☐ | ¿`process.env` se lee en **un solo** archivo? | `grep -rn "process.env" --include=*.js . \| grep -v node_modules`: fuera de `config/config.js`, solo comentarios |
+| ☐ | ¿Hay un `.env.example` con **todas** las variables y ningún secreto real? | Compararlo con `config.js` |
+| ☐ | ¿`.gitignore` excluye `node_modules/`, `.env`, la base local, logs y `coverage/`? | `git status` en un proyecto recién usado |
+| ☐ | ¿Está el `package-lock.json` versionado? | Sin él, `npm install` puede instalar otras versiones |
+| ☐ | ¿Las herramientas de desarrollo (Vitest, supertest) están en `devDependencies`? | `package.json` |
+| ☐ | ¿`package.json` declara la versión de Node (`"engines"`)? | `package.json` |
+
+### Integraciones externas
+
+| ✔ | Pregunta | Cómo verificarlo |
+|---|---|---|
+| ☐ | ¿Cada API externa está detrás de un gateway inyectado, con una versión falsa? | `CATALOG_TYPE=fake` funciona sin internet |
+| ☐ | ¿Cada pedido externo tiene **timeout**? | `EXTERNAL_TIMEOUT_MS` |
+| ☐ | ¿Si un tercero cae, lo que no depende de él sigue funcionando (degradación elegante)? | `HOLIDAYS_TYPE=fake-down` → igual se presta |
+
+### Tests
+
+| ✔ | Pregunta | Cómo verificarlo |
+|---|---|---|
+| ☐ | ¿`npm test` corre sin `.env`, sin base y sin red? | Correrlo en un clon limpio, sin `.env` |
+| ☐ | ¿Cada regla de negocio tiene su caso feliz, su borde, su violación y "el estado no cambió"? | Leer los nombres de los tests |
+| ☐ | ¿Los tests detectan bugs? | Romper el código a propósito (clase 14, sección 14) |
+
+### Documentación
+
+| ✔ | Pregunta | Cómo verificarlo |
+|---|---|---|
+| ☐ | ¿Cada endpoint está documentado con sus parámetros, su cuerpo, sus respuestas y **cada `code` de error** posible? | `/docs` + el test de rutas |
+| ☐ | ¿La documentación se genera del código o se verifica con tests (no depende de "acordarse")? | `tests/docs/`, `tests/contract/` |
+| ☐ | ¿El README permite levantar el proyecto sin preguntarle nada a nadie? | La prueba del compañero |
+| ☐ | ¿Las limitaciones conocidas están escritas? | README |
+
+### Aplicándolo a la biblioteca
+
+Pasamos el checklist por el proyecto, y aparecieron cosas:
+
+| Ítem | Hallazgo | Qué hicimos |
+|---|---|---|
+| Casos de uso sin `new Date()` | `exportBooksCsv` armaba el nombre del archivo con `new Date().toISOString()`. Además de romper la regla, era un **bug**: `toISOString()` da la fecha en **UTC**, así que un CSV exportado a las 22:30 en Buenos Aires salía con la fecha de **mañana** | Test primero (reloj fijo a las 22:30 → `libros-2026-11-04.csv`), y después inyectar `clock` en `makeBookUseCases` y usar `clock.today()` |
+| Cada `code` de error documentado | `PUT /books/:id` no verificaba el ISBN duplicado (sección 9) | Test + arreglo en `updateBook` |
+| Respuestas documentadas | `atrasoAlDevolver` no estaba documentado (sección 10) | Agregado al esquema `Loan` |
+| `"engines"` en `package.json` | Faltaba | Agregado: `"node": ">=22"` |
+| `process.env` en un solo lugar | `notifications/fileNotifier.js` leía `process.env.NOTIFICATIONS_LOG_PATH` por su cuenta. Era una variable **fantasma**: funcionaba, pero no estaba en `config.js`, ni en `.env.example`, ni en el README | Pasa a `config.js`, y se suma a `.env.example` y a la tabla del README |
+| `process.env` en un solo lugar | El script nuevo de exportación (`scripts/exportOpenApi.js`) leía `process.env.PUBLIC_URL`: se nos coló hoy mismo | La URL pasa a ser un argumento: `npm run docs:export -- openapi.json https://mi-servidor` |
+| Valores que cambian según el entorno, en un solo lugar | `requests.http` repetía la URL 134 veces | Variable `@baseUrl` |
+| Condición de carrera del tope de préstamos (R1) | Conocida desde la clase 13 | No se arregla hoy: queda escrita en **Limitaciones conocidas** del README |
+
+Lo de `exportBooksCsv` es el ejemplo perfecto de para qué sirve un checklist: la regla "los casos de uso no llaman a `new Date()`" la escribimos en la clase 13, y se nos escapó en un caso de uso de la clase 12 que **nadie volvió a mirar**. Un checklist no es para el código nuevo, es para **revisar todo** cada tanto.
+
+---
+
+## 16. documentar con un agente de IA
+
+Un agente de IA escribe un OpenAPI de 1500 líneas en un minuto, y un README en diez segundos. El problema no es la velocidad, es la **confianza**: los errores típicos de una documentación generada por IA son justo los que más daño hacen, porque se ven bien.
+
+| Lo que suele hacer un agente | Por qué es grave |
+|---|---|
+| Inventa campos "razonables" que no existen (`createdAt`, `updatedAt`) | El cliente los espera y no llegan |
+| Pone el status "de manual" en lugar del real (`400` donde la API responde `409`) | El cliente maneja el error equivocado |
+| Documenta los errores genéricos y omite los de negocio (`USER_HAS_OVERDUE_LOANS`) | Justo los que el cliente más necesita conocer |
+| Copia ejemplos de Swagger 2.0 en un documento 3.1 | El documento no valida |
+| En el README, escribe comandos que nunca ejecutó | "Instalación" que no instala |
+
+Lo que hicimos hoy es, en el fondo, un **arnés** para cualquier documentación, la escriba quien la escriba (clase 14, sección 16):
+
+- El **test de contrato** atrapa los campos inventados u omitidos.
+- El **test de rutas** atrapa los endpoints inventados u olvidados, y los permisos equivocados.
+- **`swagger-parser`** atrapa el documento inválido.
+- La **prueba del compañero** atrapa el README que no funciona: cada comando se ejecuta, en un clon limpio.
+
+Con ese arnés, un pedido razonable a un agente es: *"Agregá la descripción y los ejemplos de las operaciones de `docs/paths/users.js`. No cambies los esquemas ni las rutas. Terminaste cuando `npm test` pasa."* Lo que no se puede verificar con un comando (¿la descripción es clara? ¿el `code` listado es realmente el que lanza ese caso de uso?) lo revisás vos.
 
 ---
 
 ## 17. errores comunes
 
-| Error                                                                       | Consecuencia                                                                             | Qué hacemos                                                                                 |
-| --------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
-| Olvidar el `await` en `expect(...).rejects`                             | El test pasa siempre, sin verificar nada                                                 | `await expect(...)`, y hacerlo fallar a propósito una vez                                 |
-| `expect(fn())` en lugar de `expect(() => fn())` para errores síncronos | El error salta antes de que `expect` lo atrape                                         | Pasar una función                                                                           |
-| `toBe` con objetos                                                        | Falla aunque el contenido sea igual                                                      | `toEqual` / `toMatchObject`                                                              |
-| Compartir el DAO (o los datos de prueba) entre tests                        | Tests que dependen del orden; pasan solos y fallan juntos                                | Instancia nueva por test; copiar los datos                                                   |
-| Usar `new Date()` o la red en un test                                     | Pasa hoy, falla el sábado o sin wifi                                                    | Reloj fijo, gateways falsos                                                                  |
-| Afirmar de más (`toEqual` del préstamo entero)                          | Test frágil: falla por cambios que no le importan                                       | Afirmar lo que dice el nombre                                                                |
-| Verificar el texto exacto del mensaje                                       | Se rompe al corregir una tilde                                                           | Verificar `code` y `statusCode`                                                          |
-| Verificar con espías cómo se implementó (`adjustStock` llamado con...) | Falla al refactorizar aunque el comportamiento no cambie                                 | Verificar el resultado y el estado; espías solo cuando la interacción es el comportamiento |
-| Varios comportamientos en un solo `it`                                    | Cuando falla, no sabés cuál                                                            | Un comportamiento por test                                                                   |
-| Nombres como `"test 1"` o `"funciona"`                                  | El reporte no dice qué se rompió                                                       | Situación → resultado esperado                                                             |
-| Arreglar un test "incómodo" con `vi.mock` o variables de entorno         | El acoplamiento sigue ahí                                                               | Escuchar al test: inyectar la dependencia                                                    |
-| Testear solo el caso feliz                                                  | Las reglas viven en los errores y los bordes                                             | Los cuatro casos de cada regla                                                               |
-| Correr tests contra la base de producción ("total borro lo que creo")      | Mails reales, datos sucios, choques con usuarios reales                                  | Base propia y descartable; barrera en el setup de los tests                                  |
-| Pedirle a un agente "haceme los tests" sin spec ni reglas                   | Tests que confirman los bugs, `vi.mock` por todos lados, código de producción tocado | SDD + `AGENTS.md` (`prompt-agente.md`)                                                   |
-| Perseguir el 100% de cobertura                                              | Tests sin `expect` que solo suben el número                                           | Cobertura como mapa de lo que falta, no como meta                                            |
+| Error | Consecuencia | Qué hacemos |
+|---|---|---|
+| Documentar a mano, aparte del código, sin ningún test | La documentación se desfasa en semanas y empieza a mentir | Generar de los esquemas + tests de rutas y de contrato |
+| Usar `io: "output"` para documentar un pedido | Los campos con `default` aparecen como obligatorios | `io: "input"` para lo que entra |
+| Confiar en que el `refine` "se documenta solo" | Un 400 que la documentación no anunciaba | `.meta({ description })` en el campo |
+| Documentar solo el caso feliz (`200`) | El cliente no sabe qué errores manejar | Cada `code` posible, con un ejemplo |
+| Comparar el `message` en el cliente | Se rompe al corregir una tilde | Documentar que lo estable es el `code` |
+| Olvidar `security: []` en las operaciones públicas | Con un `security` global, la UI pide token para el login | Público **explícito** |
+| Escribir `:id` en lugar de `{id}` en los paths | El documento no valida, o Swagger UI no reemplaza el parámetro | Sintaxis de OpenAPI: `{id}` |
+| Esquemas de respuesta "abiertos" | Un `passwordHash` filtrado pasa desapercibido | `z.strictObject` en el contrato |
+| Validar el objeto del caso de uso y no lo serializado | Un `Date` no es un `string`: el test falla, o miente | `JSON.parse(JSON.stringify(...))` |
+| Publicar Swagger en producción sin pensarlo, o creer que ocultarlo es seguridad | Mapa completo para cualquiera / falsa sensación de seguridad | `DOCS_ENABLED` + proteger bien cada endpoint |
+| Un README que repite los 23 endpoints con todos sus campos | Dos documentaciones que se desfasan entre sí | Resumen + enlace a `/docs` |
+| Un README que nadie probó en un clon limpio | El primer comando falla | La prueba del compañero |
+| Esconder las limitaciones | Parece que no las viste | Una sección de limitaciones conocidas |
 
 ---
 
 ## 18. lo que NO vimos (y que existe)
 
-- **Tests de integración HTTP** con `supertest`: levantar la app de Express en memoria y hacer `POST /loans` de verdad, verificando status codes, headers (`Location`) y el error handler.
-- **Tests de contrato del DAO**: correr **el mismo** archivo de tests contra `LoansMemoryDao` y `LoansSequelizeDao` (con SQLite en `:memory:`), para garantizar que los dos adaptadores se comportan igual. Es la forma de verificar en serio la promesa de la clase 9.
-- **TDD** (*Test-Driven Development*): escribir el test **antes** que el código. Rojo (el test falla) → verde (el código mínimo que lo hace pasar) → refactor.
-- **Integración continua** (GitHub Actions, GitLab CI): que `npm test` corra solo en cada *push* y bloquee el *merge* si algo falla.
-- **Mutation testing automático** (Stryker): genera cientos de "bugs" en tu código y te dice cuáles no detectó ningún test.
-- **Property-based testing** (`fast-check`): en vez de escribir los casos a mano, se describe una propiedad ("sumar N días hábiles nunca cae en sábado") y la herramienta prueba miles de entradas al azar.
-- **Snapshot testing** (`toMatchSnapshot`): guarda la salida la primera vez y avisa si cambia. Útil para salidas grandes (un CSV entero), peligroso si se aceptan los cambios sin mirar.
-- **Tests end-to-end** y bases de datos reales en contenedores (Testcontainers) para probar contra PostgreSQL de verdad.
+- **Design-first con linters**: escribir el OpenAPI primero y controlarlo con **Spectral** o **Redocly CLI** (`npx @redocly/cli lint openapi.json`), con reglas propias del equipo ("todo `operationId` en camelCase", "toda operación con al menos un 4xx").
+- **Librerías que hacen el puente Zod → OpenAPI** más completo: `@asteasolutions/zod-to-openapi` o `zod-openapi`, que registran las rutas junto con los esquemas. Y frameworks que lo traen integrado: **NestJS** (`@nestjs/swagger`), Fastify, Hono, tsoa.
+- **Un catálogo de errores que el código use**: hoy `errorCatalog.js` es una copia de lo que lanzan los casos de uso. Si los casos de uso importaran los códigos de ese catálogo (`throw appError(ERRORS.LOAN_LIMIT_REACHED)`), un código nuevo no se podría olvidar en la documentación.
+- **Validar contra el contrato en tiempo de ejecución** (`express-openapi-validator`): el servidor rechaza los pedidos que no cumplen el documento, y en desarrollo también verifica las respuestas.
+- **Generación de clientes** (`openapi-typescript`, `orval`, `openapi-generator`): el front recibe funciones tipadas generadas del contrato, y si el back cambia un campo, el front deja de compilar.
+- **Mocks desde el contrato** (Prism): un servidor falso que responde según el documento, para que el front arranque antes que el back.
+- **Versionado de la API**: qué es un cambio que rompe a los clientes (*breaking change*), versiones en la URL (`/v1/loans`), `deprecated: true` en una operación, y un **CHANGELOG** con versionado semántico.
+- **AsyncAPI**: el equivalente de OpenAPI para APIs basadas en **eventos y mensajes** (como nuestro `book.lowStock`, si saliera por una cola).
+- **ADR** (*Architecture Decision Records*): un archivo corto por cada decisión importante ("por qué Zod y no class-validator"), con el contexto y las alternativas descartadas.
+- **Otras UI para el mismo documento**: Redoc (solo lectura, muy prolija) y Scalar (más moderna, con cliente integrado).
 
 ---
 
 ## Cierre
 
-- Un test automático es **código que verifica código**: cuida las reglas contra las **regresiones** cada vez que cambiamos algo, en milisegundos. No reemplaza al testing **manual** de QA (exploración, aceptación, usabilidad): se reparten el trabajo.
-- Vitest es **una** herramienta entre varias (Jest, `node:test`, Mocha...): las ideas de hoy sirven para cualquiera.
-- Hoy escribimos tests **unitarios** de **casos de uso** y **dominio**, sin servidor, sin base, sin red y sin `.env`. Fue posible porque durante 13 clases **inyectamos** cada dependencia: testeabilidad es un efecto de la arquitectura.
-- Un buen test tiene **Arrange / Act / Assert**, un nombre que se lee como una especificación, y afirma **lo que promete, y nada más**.
-- Los errores se verifican por su **`code`** y **`statusCode`**, con `await expect(...).rejects`, y después se verifica que **el estado no cambió**.
-- Los **dobles de prueba** reemplazan lo lento o incontrolable: **fakes** para los DAOs, **stubs** para el hasher y los gateways, **espías** cuando la interacción es el comportamiento (un evento emitido, una API que no se debió consultar).
-- Cada test arma **su propio mundo** (instancias nuevas, datos copiados, reloj fijo): nada se comparte, nada depende del orden ni del día.
-- **Si cuesta testearlo, está acoplado**: el test de `createBook` destapó una dependencia de `config.js` que se resolvió inyectando el umbral.
-- La **cobertura** muestra lo que falta; **romper el código a propósito** muestra si los tests protegen algo.
+- Hay **tres documentos y tres lectores**: la documentación de la API (quien la consume), el README (quien la levanta) y los comentarios y tests (quien la mantiene).
+- **OpenAPI** es el formato estándar para describir una API REST; **Swagger** son las herramientas. Al ser estándar, el mismo documento sirve para Swagger UI, Postman, generadores de clientes y linters.
+- Un documento OpenAPI tiene `info`, `servers`, `paths` (con sus operaciones), `components` (lo reutilizable, con `$ref`) y `security`.
+- El enemigo es el **desfasaje**: una documentación que miente es peor que ninguna. Se combate **generando** lo que se pueda y **testeando** el resto.
+- Los esquemas de **Zod** que validan los pedidos generan la documentación con `z.toJSONSchema` (`io: "input"`). Lo que JSON Schema no expresa (`refine`) se cuenta con `.meta({ description })`.
+- Un helper aplica en un solo lugar lo que se repite (seguridad, 400, 401, 403, formato de error), y cada operación lista **cada `code`** que puede devolver.
+- **Documentar es hacerse preguntas**: al listar los errores de `PUT /books/:id` apareció un bug.
+- Los **tests de contrato** verifican que las respuestas reales cumplen lo documentado (y encontraron `atrasoAlDevolver`); los **tests de rutas** verifican que cada ruta está documentada con el acceso correcto.
+- **Swagger UI** (`/docs`) es para personas; `/openapi.json`, para máquinas. Publicarla en producción es una decisión, y ocultarla **no** es seguridad.
+- El **README** se escribe para alguien que nunca vio el proyecto, y se prueba siguiéndolo en un clon limpio.
+- El **checklist** convierte 15 clases de decisiones en preguntas verificables, y aplicado a la biblioteca encontró un `new Date()` que además era un bug de zona horaria.
 
-La próxima clase (15) también es de **calidad**: documentamos la API con **Swagger/OpenAPI**, escribimos un **README** profesional y repasamos un checklist de buenas prácticas. Los nombres de los tests de hoy son un buen punto de partida para describir qué hace cada endpoint.
+La próxima clase (16) es el **simulacro de examen**: un enunciado nuevo, con tiempo acotado. El checklist de hoy es la mejor guía para repasar: si tu proyecto lo cumple, sabés hacer todo lo que se va a pedir.

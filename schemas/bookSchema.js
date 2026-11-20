@@ -4,17 +4,21 @@ import { hasValidIsbn13Checksum } from "../utils/isbn.js";
 
 // Definición de campos reutilizables
 const fields = {
-  titulo: z.string({ error: "El título es obligatorio" }).min(1, "El título no puede estar vacío"),
-  autor: z.string({ error: "El autor es obligatorio" }).min(1, "El autor no puede estar vacío"),
+  titulo: z.string({ error: "El título es obligatorio" }).min(1, "El título no puede estar vacío").meta({ examples: ["Ficciones"] }),
+  autor: z.string({ error: "El autor es obligatorio" }).min(1, "El autor no puede estar vacío").meta({ examples: ["Jorge Luis Borges"] }),
   // Dos pasos encadenados (Clase 13): primero la forma (13 dígitos) y recién después la cuenta del dígito de control.
   // Sigue siendo una validación de FORMA: se decide mirando solo el dato, sin consultar nada.
   isbn: z
     .string()
     .regex(/^\d{13}$/, "El ISBN debe tener exactamente 13 dígitos")
-    .refine(hasValidIsbn13Checksum, "El ISBN tiene un dígito de control inválido"),
+    .refine(hasValidIsbn13Checksum, "El ISBN tiene un dígito de control inválido")
+    // Clase 15: el `refine` no se puede expresar en JSON Schema y desaparece de la documentación.
+    // La `description` es la forma de que el cliente se entere de la regla sin leer nuestro código.
+    .meta({ description: "ISBN-13: 13 dígitos con dígito de control válido", examples: ["9789500700122"] }),
   stock: z
     .number({ error: "El stock debe ser un número" })
-    .int("El stock debe ser un número entero"),
+    .int("El stock debe ser un número entero")
+    .meta({ examples: [5] }),
 };
 
 // Esquema para POST /books
@@ -44,16 +48,17 @@ const paginationSchema = z.object({
 
 // Esquema completo para req.query en GET /books (filtros, ordenamiento y paginación)
 const queryBooksSchema = z.object({
-  autor: z.string().optional(),
-  author: z.string().optional(),
-  isbn: z.string().optional(),
+  autor: z.string().meta({ description: "Filtra por autor (coincidencia parcial, sin distinguir mayúsculas)" }).optional(),
+  author: z.string().meta({ description: "Alias de `autor`" }).optional(),
+  isbn: z.string().meta({ description: "Filtra por ISBN exacto" }).optional(),
   // Solo columnas reales: el DAO las usa tal cual en el ORDER BY
   sort: z
     .string()
     .regex(/^-?(id|titulo|autor|isbn|stock)$/, "sort debe ser id, titulo, autor, isbn o stock (con '-' para descendente)")
+    .meta({ description: "Campo de orden; con `-` adelante es descendente", examples: ["-titulo"] })
     .optional(),
-  incluir: z.enum(["usuarios"], { error: "incluir solo admite 'usuarios'" }).optional(),
-  activos: activosSchema.optional(), // solo aplica junto con incluir=usuarios
+  incluir: z.enum(["usuarios"], { error: "incluir solo admite 'usuarios'" }).meta({ description: "Agrega a cada libro los usuarios que lo tienen o lo tuvieron" }).optional(),
+  activos: activosSchema.meta({ description: "Solo junto con `incluir`: `true` = préstamos sin devolver, `false` = devueltos" }).optional(),
   page: z.coerce.number().int("La página debe ser un entero").positive("La página debe ser mayor a 0").optional(),
   limit: z.coerce.number().int("El límite debe ser un entero").positive("El límite debe ser mayor a 0").max(100, "El límite máximo es 100").optional(),
 });
@@ -62,7 +67,7 @@ const queryBooksSchema = z.object({
 const exportBooksQuerySchema = queryBooksSchema
   .pick({ autor: true, author: true, isbn: true, sort: true, page: true, limit: true })
   .extend({
-    enriquecer: activosSchema.optional(), // "true" / "false"
+    enriquecer: activosSchema.meta({ description: "`true` agrega editorial, páginas y fecha de publicación desde el catálogo externo" }).optional(),
     separador: z.enum([",", ";"], { error: "separador debe ser ',' o ';'" }).default(","), // ";" para Excel en español
   });
 

@@ -1,0 +1,134 @@
+# Ejercicio 1 — Un documento OpenAPI escrito a mano (Clase 15)
+#
+# No lo usa la aplicación: sirve para entender la estructura antes de generarla. Se puede pegar en editor.swagger.io.
+#
+# ¿Qué diferencia hay entre `openapi: 3.1.0` y el `version` de `info`?
+#   `openapi` es la versión de la ESPECIFICACIÓN: le dice a las herramientas cómo leer el archivo. `info.version` es la
+#   versión de NUESTRA API (del contrato): la cambiamos nosotros cuando cambia lo que la API acepta o devuelve.
+#
+# ¿Por qué `/books/{id}` y no `/books/:id`?
+#   `:id` es la sintaxis de Express; OpenAPI usa llaves. Con `:id`, el validador marca que falta declarar el
+#   parámetro de path y Swagger UI no reemplaza el valor al probar.
+#
+# ¿Qué pasaría con el login sin `security: []`, teniendo un `security` global?
+#   Heredaría el global: la documentación diría que hace falta un token para obtener el token. Swagger UI mandaría el
+#   header si hay uno cargado y el generador de clientes lo pediría. `security: []` declara que es público.
+
+openapi: 3.1.0
+
+info:
+  title: Biblioteca API
+  version: 1.0.0
+  description: Dos operaciones escritas a mano, para entender la estructura.
+
+servers:
+  - url: http://localhost:8000
+
+paths:
+  /books/{id}:
+    get:
+      tags: [Libros]
+      operationId: getBook
+      summary: Obtener un libro
+      security: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+            exclusiveMinimum: 0
+      responses:
+        "200":
+          description: El libro
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Book"
+        "404":
+          description: No existe un libro con ese id
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              example:
+                error:
+                  code: BOOK_NOT_FOUND
+                  message: No existe un libro con ese id
+
+  /auth/login:
+    post:
+      tags: [Autenticación]
+      operationId: login
+      summary: Iniciar sesión
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email: { type: string, format: email }
+                password: { type: string, minLength: 1 }
+            example:
+              email: admin@biblioteca.com
+              password: Admin1234
+      responses:
+        "200":
+          description: Sesión iniciada
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [token, user]
+                properties:
+                  token: { type: string, description: "JWT para el header Authorization: Bearer <token>" }
+                  user:
+                    type: object
+                    properties:
+                      id: { type: integer }
+                      nombre: { type: string }
+                      email: { type: string }
+                      rol: { type: string, enum: [lector, admin] }
+        "401":
+          description: Email o contraseña incorrectos
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              example:
+                error:
+                  code: INVALID_CREDENTIALS
+                  message: Email o contraseña incorrectos
+
+components:
+  schemas:
+    Book:
+      type: object
+      required: [id, titulo, autor, isbn, stock]
+      properties:
+        id: { type: integer }
+        titulo: { type: string, examples: ["El principito"] }
+        autor: { type: string }
+        isbn: { type: [string, "null"] }
+        stock: { type: integer, minimum: 0 }
+    ErrorResponse:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code: { type: string }
+            message: { type: string }
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+security:
+  - bearerAuth: []

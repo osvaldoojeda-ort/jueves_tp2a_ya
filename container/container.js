@@ -18,7 +18,7 @@ import makeAuthUseCases from "../usecases/auth/makeAuthUseCases.js";
 import seedAdmin from "../usecases/auth/seedAdmin.js";
 import AuthController from "../controllers/AuthController.js";
 import createAuthRouter from "../routes/authRoutes.js";
-import { JWT_SECRET, JWT_EXPIRES_IN, BCRYPT_ROUNDS, ADMIN_EMAIL, ADMIN_PASSWORD } from "../config/config.js";
+import { JWT_SECRET, JWT_EXPIRES_IN, BCRYPT_ROUNDS, ADMIN_EMAIL, ADMIN_PASSWORD, LOGIN_RATE_LIMIT_MAX, DOCS_ENABLED } from "../config/config.js";
 import { getCatalog } from "../gateways/catalogFactory.js";
 import makeCatalogUseCases from "../usecases/catalog/makeCatalogUseCases.js";
 import CatalogController from "../controllers/CatalogController.js";
@@ -27,6 +27,8 @@ import { IMPORT_CONCURRENCY, LOW_STOCK_THRESHOLD, LOAN_MAX_ACTIVE, LOAN_BUSINESS
 import createClock from "../utils/clock.js";
 import { getHolidaysGateway } from "../gateways/holidaysFactory.js";
 import { Router } from "express";
+import buildOpenApiSpec from "../docs/openapi.js";
+import createDocsRouter from "../routes/docsRoutes.js";
 
 /**
  * Composition Root Centralizado.
@@ -69,9 +71,14 @@ async function buildContainer() {
   // Catálogo externo: gateway real (Open Library) o falso, según CATALOG_TYPE
   const catalog = getCatalog();
 
+  // Reloj (real o fijo para "viajar en el tiempo"). Clase 15: se crea antes porque ahora también lo usan los libros
+  const clock = createClock({ fixedNow: CLOCK_NOW });
+  if (CLOCK_NOW) console.log(`[Reloj] Fijo en ${CLOCK_NOW} (hoy = ${clock.today()})`);
+
   const bookUseCases = makeBookUseCases(booksDao, loansDao, events, catalog, {
     importConcurrency: IMPORT_CONCURRENCY,
     lowStockThreshold: LOW_STOCK_THRESHOLD, // Clase 14: inyectado (antes createBook/updateBook importaban config.js)
+    clock, // Clase 15: el nombre del CSV usa el día de la biblioteca (antes: new Date() en UTC)
   });
 
   // 3. Inyectamos los Casos de Uso en los Controladores
@@ -91,12 +98,10 @@ async function buildContainer() {
 
   // Autenticación: registro, login y perfil
   const authController = new AuthController(makeAuthUseCases({ usersDao, loansDao, events, hasher, tokens }));
-  router.use("/auth", createAuthRouter(authController, auth));
+  router.use("/auth", createAuthRouter(authController, auth, { loginRateLimitMax: LOGIN_RATE_LIMIT_MAX }));
 
   // Entidad Loans
-  // Clase 13: reloj (real o fijo para "viajar en el tiempo"), feriados (API real o falsa) y los números de las reglas
-  const clock = createClock({ fixedNow: CLOCK_NOW });
-  if (CLOCK_NOW) console.log(`[Reloj] Fijo en ${CLOCK_NOW} (hoy = ${clock.today()})`);
+  // Clase 13: feriados (API real o falsa) y los números de las reglas. El reloj se crea más arriba (lo usan libros y préstamos)
   const holidays = getHolidaysGateway();
   const loanRules = {
     maxActive: LOAN_MAX_ACTIVE, // R1
@@ -107,6 +112,11 @@ async function buildContainer() {
     makeLoanUseCases({ loansDao, booksDao, usersDao, events, clock, holidays, loanRules, lowStockThreshold: LOW_STOCK_THRESHOLD })
   );
   router.use("/loans", createLoansRouter(loansController, auth));
+
+  // Documentación (Clase 15): GET /docs (Swagger UI) y GET /openapi.json
+  if (DOCS_ENABLED) {
+    router.use(createDocsRouter(buildOpenApiSpec()));
+  }
 
   // Retornamos el router principal listo para ser usado por Express
   return router;

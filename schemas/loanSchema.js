@@ -6,7 +6,7 @@ const id = (label) =>
 // Esquema para POST /loans
 // userId es opcional: por defecto el préstamo es para quien hace el pedido (solo un admin puede indicar otro usuario)
 const createLoanSchema = z.object({
-  userId: id("userId").optional(),
+  userId: id("userId").meta({ description: "Solo admin: a nombre de quién va el préstamo. Si se omite, es para quien hace el pedido" }).optional(),
   bookId: id("bookId"),
 });
 
@@ -24,11 +24,12 @@ const dateOnly = z.iso.date({ error: "La fecha debe tener formato AAAA-MM-DD" })
 // Las cadenas AAAA-MM-DD se comparan con <= directamente porque ordenan igual que las fechas.
 const queryLoansSchema = z
   .object({
-    userId: z.coerce.number().int().positive().optional(),
+    userId: z.coerce.number().int().positive().meta({ description: "Un lector solo puede pedir los suyos (otro userId → 403)" }).optional(),
     bookId: z.coerce.number().int().positive().optional(),
-    activos: activosSchema.optional(),
-    desde: dateOnly.optional(), // fechaPrestamo desde (inclusive)
-    hasta: dateOnly.optional(), // fechaPrestamo hasta (inclusive)
+    activos: activosSchema.meta({ description: "`true` = sin devolver, `false` = ya devueltos" }).optional(),
+    // El `refine` de abajo no llega a la documentación: la regla "desde <= hasta" se cuenta en la description
+    desde: dateOnly.meta({ description: "Prestados desde este día, inclusive (no puede ser posterior a `hasta`)" }).optional(),
+    hasta: dateOnly.meta({ description: "Prestados hasta este día, inclusive" }).optional(),
   })
   .refine((q) => !q.desde || !q.hasta || q.desde <= q.hasta, {
     message: "'desde' no puede ser posterior a 'hasta'",

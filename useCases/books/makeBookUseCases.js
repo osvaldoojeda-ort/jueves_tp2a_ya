@@ -11,9 +11,10 @@ import exportBooksCsv from "./exportBooksCsv.js";
  * Factory de Casos de Uso para Libros.
  * Recibe el DAO de libros, el de préstamos (para validar el borrado), el bus de eventos y el catálogo externo, e inyecta la dependencia en cada caso de uso.
  * Clase 14: también recibe `lowStockThreshold` (antes createBook y updateBook lo importaban de config.js).
+ * Clase 15: y el reloj (`clock`), para el nombre del CSV exportado.
  * Devuelve un objeto con las funciones de uso listas para ser consumidas sin pasar el DAO en cada llamada.
  */
-function makeBookUseCases(dao, loansDao, events, catalog, { importConcurrency, lowStockThreshold }) {
+function makeBookUseCases(dao, loansDao, events, catalog, { importConcurrency, lowStockThreshold, clock }) {
   const createBookUseCase = (data) => createBook(data, dao, events, lowStockThreshold);
   const getBooksUseCase = (filters) => getBooks(filters, dao, loansDao);
 
@@ -25,7 +26,7 @@ function makeBookUseCases(dao, loansDao, events, catalog, { importConcurrency, l
     deleteBook: (id) => deleteBook(id, dao, loansDao),
     getBookDetails: (id) => getBookDetails(id, dao, catalog),
     importBooks: (params) => importBooks(params, dao, catalog, createBookUseCase, importConcurrency),
-    exportBooksCsv: (params) => exportBooksCsv(params, getBooksUseCase, catalog),
+    exportBooksCsv: (params) => exportBooksCsv(params, getBooksUseCase, catalog, clock),
   };
 }
 

@@ -2,7 +2,7 @@ import express from "express";
 import logger from "./middlewares/logger.js";
 import notFound from "./middlewares/notFound.js";
 import errorHandler from "./middlewares/errorHandler.js";
-import { PORT } from "./config/config.js";
+import { PORT, DOCS_ENABLED } from "./config/config.js";
 import buildContainer from "./container/container.js";
 
 async function startServer() {
@@ -26,7 +26,8 @@ async function startServer() {
   app.use(errorHandler);
 
   app.listen(PORT, () => {
-    console.log(`Servidor Express (Clase 14) corriendo en http://localhost:${PORT}`);
+    console.log(`Servidor Express (Clase 15) corriendo en http://localhost:${PORT}`);
+    if (DOCS_ENABLED) console.log(`Documentación: http://localhost:${PORT}/docs`);
   });
 }
 

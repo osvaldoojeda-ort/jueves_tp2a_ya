@@ -21,8 +21,12 @@ const ENRICHED_COLUMNS = [
  * El enriquecimiento se hace con UN solo pedido en lote al catálogo para todos los ISBN.
  * Si el catálogo no responde, igual se exporta lo local y se informa en `enrichment`.
  * Devuelve { csv, filename, enrichment: "skipped" | "ok" | "unavailable" }.
+ *
+ * Clase 15 (checklist): el nombre del archivo usaba new Date().toISOString(), es decir, el día en UTC: a las 22:30
+ * en Buenos Aires el archivo salía con la fecha de mañana. Ahora usa el reloj inyectado (clock.today()), que
+ * devuelve el día en la zona de la biblioteca, igual que los préstamos.
  */
-async function exportBooksCsv({ enriquecer, separador = ",", ...filters }, getBooks, catalog) {
+async function exportBooksCsv({ enriquecer, separador = ",", ...filters }, getBooks, catalog, clock) {
   const books = await getBooks(filters);
 
   let infoByIsbn = {};
@@ -45,7 +49,7 @@ async function exportBooksCsv({ enriquecer, separador = ",", ...filters }, getBo
 
   return {
     csv: toCsv(rows, columns, { separator: separador }),
-    filename: `libros-${new Date().toISOString().slice(0, 10)}.csv`,
+    filename: `libros-${clock.today()}.csv`,
     enrichment,
   };
 }

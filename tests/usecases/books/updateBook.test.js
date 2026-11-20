@@ -35,4 +35,26 @@ describe("updateBook", () => {
 
     expect(events.emit).not.toHaveBeenCalled();
   });
+
+  // Clase 15: este bug apareció AL DOCUMENTAR los errores de PUT /books/:id ("¿y si mando el ISBN de otro libro?").
+  // En memoria quedaban dos libros con el mismo ISBN; con Sequelize, el índice único respondía un 500.
+  describe("ISBN duplicado (bug encontrado al documentar)", () => {
+    beforeEach(async () => {
+      await dao.save({ titulo: "Ficciones", autor: "Borges", isbn: "9789500700122", stock: 3 });
+    });
+
+    it("el ISBN de OTRO libro → 409 ISBN_DUPLICATE, sin tocar el libro", async () => {
+      await expect(updateBook(1, { isbn: "9789500700122" }, dao, events, 2)).rejects.toMatchObject({
+        code: "ISBN_DUPLICATE",
+        statusCode: 409,
+      });
+      expect((await dao.getById(1)).isbn).toBeNull();
+    });
+
+    it("reenviar el ISBN que el libro YA tiene no es un duplicado", async () => {
+      const updated = await updateBook(2, { isbn: "9789500700122", stock: 4 }, dao, events, 2);
+
+      expect(updated).toMatchObject({ id: 2, isbn: "9789500700122", stock: 4 });
+    });
+  });
 });

@@ -1,4 +1,4 @@
-import { NOTIFIER_TYPE } from "../config/config.js";
+import { NOTIFIER_TYPE, NOTIFICATIONS_LOG_PATH } from "../config/config.js";
 import consoleNotifier from "./consoleNotifier.js";
 import fileNotifier from "./fileNotifier.js";
 
@@ -8,7 +8,7 @@ import fileNotifier from "./fileNotifier.js";
  */
 function getNotifier() {
   if (NOTIFIER_TYPE === "file") {
-    console.log("[Notificaciones] Usando archivo (notifications.log)");
+    console.log(`[Notificaciones] Usando archivo (${NOTIFICATIONS_LOG_PATH})`);
     return fileNotifier;
   }
   console.log("[Notificaciones] Usando consola");

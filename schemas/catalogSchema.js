@@ -7,6 +7,7 @@ import { z } from "zod";
 const lookupQuerySchema = z.object({
   isbns: z
     .string({ error: "isbns es obligatorio (separados por coma)" })
+    .meta({ description: "Entre 1 y 10 ISBN de 13 dígitos, separados por coma", examples: ["9780156012195,9780060883287"] })
     .transform((value) => [...new Set(value.split(",").map((isbn) => isbn.trim()).filter(Boolean))])
     .pipe(
       z
@@ -14,7 +15,10 @@ const lookupQuerySchema = z.object({
         .min(1, "Enviá al menos un ISBN")
         .max(10, "Se pueden consultar hasta 10 ISBN por pedido")
     ),
-  mode: z.enum(["sequential", "parallel", "batch"], { error: "mode debe ser sequential, parallel o batch" }).default("parallel"),
+  mode: z
+    .enum(["sequential", "parallel", "batch"], { error: "mode debe ser sequential, parallel o batch" })
+    .meta({ description: "Estrategia de consulta: de a uno, todos a la vez, o un único pedido en lote" })
+    .default("parallel"),
 });
 
 export { lookupQuerySchema };

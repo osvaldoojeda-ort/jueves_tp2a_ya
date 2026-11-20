@@ -9,6 +9,8 @@ const PERSISTENCE_TYPE = process.env.PERSISTENCE_TYPE || "memory"; // "memory" o
 
 const NOTIFIER_TYPE = process.env.NOTIFIER_TYPE || "console"; // "console" o "file"
 const LOW_STOCK_THRESHOLD = Number(process.env.LOW_STOCK_THRESHOLD ?? 2); // alerta si stock <= umbral
+// Clase 15: antes se leía directo en notifications/fileNotifier.js (una variable que no figuraba en ningún lado)
+const NOTIFICATIONS_LOG_PATH = process.env.NOTIFICATIONS_LOG_PATH || "notifications.log"; // con NOTIFIER_TYPE=file
 
 // --- Seguridad (Clase 11) ---
 // El secreto firma los tokens: si alguien lo conoce, puede fabricar tokens válidos. Sin valor por defecto a propósito.
@@ -46,6 +48,11 @@ const CLOCK_NOW = process.env.CLOCK_NOW || undefined;
 const HOLIDAYS_TYPE = process.env.HOLIDAYS_TYPE || "argentinadatos";
 const HOLIDAYS_URL = process.env.HOLIDAYS_URL || "https://api.argentinadatos.com";
 
+// --- Documentación (Clase 15) ---
+// Swagger UI y /openapi.json. Por defecto encendida, salvo en producción (ver la sección 12 del material:
+// documentar no es secreto, pero en una API interna no hace falta publicarle el mapa a cualquiera).
+const DOCS_ENABLED = (process.env.DOCS_ENABLED ?? (NODE_ENV === "production" ? "false" : "true")) === "true";
+
 // Administrador inicial (se siembra al arrancar si no existe). Sin ADMIN_PASSWORD no se siembra.
 const ADMIN_EMAIL = process.env.ADMIN_EMAIL || "admin@biblioteca.com";
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD;
@@ -56,6 +63,7 @@ export {
   PERSISTENCE_TYPE,
   NOTIFIER_TYPE,
   LOW_STOCK_THRESHOLD,
+  NOTIFICATIONS_LOG_PATH,
   JWT_SECRET,
   JWT_EXPIRES_IN,
   BCRYPT_ROUNDS,
@@ -76,4 +84,5 @@ export {
   HOLIDAYS_URL,
   ADMIN_EMAIL,
   ADMIN_PASSWORD,
+  DOCS_ENABLED,
 };

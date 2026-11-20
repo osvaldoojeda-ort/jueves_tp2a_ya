@@ -1,15 +1,19 @@
 {
-  "name": "biblioteca-testing",
+  "name": "biblioteca-api",
   "version": "1.0.0",
-  "description": "API REST de Biblioteca — Testing de casos de uso con Vitest, sin infraestructura (Clase 14)",
+  "description": "API REST de Biblioteca — Documentación con OpenAPI/Swagger, README y buenas prácticas (Clase 15)",
   "type": "module",
   "main": "index.js",
+  "engines": {
+    "node": ">=22"
+  },
   "scripts": {
     "start": "node --env-file=.env index.js",
-    "dev": "node --env-file .env --watch index.js",
+    "dev": "node --env-file=.env --watch index.js",
     "test": "vitest run",
     "test:watch": "vitest",
-    "coverage": "vitest run --coverage"
+    "coverage": "vitest run --coverage",
+    "docs:export": "node scripts/exportOpenApi.js"
   },
   "keywords": [
     "express",
@@ -27,7 +31,9 @@
     "csv",
     "open-library",
     "vitest",
-    "testing"
+    "testing",
+    "openapi",
+    "swagger"
   ],
   "author": "",
   "license": "ISC",
@@ -38,10 +44,13 @@
     "jsonwebtoken": "^9.0.3",
     "sequelize": "^6.37.5",
     "sqlite3": "^5.1.7",
+    "swagger-ui-express": "^5.0.1",
     "zod": "^4.5.4"
   },
   "devDependencies": {
+    "@apidevtools/swagger-parser": "^13.1.0",
     "@vitest/coverage-v8": "^5.1.0",
+    "supertest": "^7.3.2",
     "vitest": "^5.1.0"
   }
 }

@@ -4,6 +4,9 @@ import EVENTS from "../../events/eventNames.js";
 /**
  * Caso de Uso: Actualizar un libro existente.
  * Regla de negocio opcional: El stock no puede ser menor a 0 si se envía.
+ * Clase 15: si cambia el ISBN, no puede ser el de OTRO libro (409 ISBN_DUPLICATE). Lo descubrimos al documentar:
+ * createBook lo verificaba y updateBook no. En memoria quedaban dos libros con el mismo ISBN; con Sequelize,
+ * el índice único de la base lo frenaba, pero con un 500 en lugar de un 409.
  * Efecto secundario desacoplado: si el cambio deja el stock bajo, emite "book.lowStock".
  * No sabe quién escucha ni qué se hace con el aviso (mail, log, etc.).
  *
@@ -22,6 +25,13 @@ import EVENTS from "../../events/eventNames.js";
 async function updateBook(id, changes, dao, events, lowStockThreshold) {
   if (changes.stock !== undefined && changes.stock < 0) {
     throw new AppError("INVALID_STOCK", "El stock no puede ser negativo", 400);
+  }
+
+  if (changes.isbn) {
+    const owner = await dao.getByIsbn(changes.isbn);
+    if (owner && owner.id !== Number(id)) {
+      throw new AppError("ISBN_DUPLICATE", "Ese ISBN ya está registrado", 409);
+    }
   }
 
   const updated = await dao.update(id, changes);
